@@ -1,12 +1,13 @@
-//! **IDENTIFY namespace parsing**: the two facts a block driver needs from the controller's
+//! **Identify namespace parsing**: the two facts a block driver needs from the controller's
 //! answer, read defensively.
 
-/// The two facts the driver needs from the 4096-byte IDENTIFY namespace structure (section 5.15.2,
-/// figure 245): the namespace size in logical blocks (NSZE, bytes 0..8) and the
-/// data shift of the LBA format in use (FLBAS names one of 16 formats; each format's LBADS is
-/// `1 << shift` bytes per block). `None` if the structure is shorter than the fields it must
-/// carry, or describes a block size outside what a driver of 4096-byte blocks can serve (LBADS below 9 is the spec's "unsupported" marker; above 12 a block would outgrow the
-/// transfer buffer).
+/// The two facts the driver needs from the 4096-byte Identify namespace structure (section 5.15.2,
+/// figure 245): the namespace size in logical blocks (Namespace Size (`NSZE`), bytes 0..8) and the
+/// data shift of the logical block address (LBA) format in use (Formatted LBA Size (`FLBAS`) names
+/// one of 16 formats; each format's LBA Data Size (`LBADS`) is `1 << shift` bytes per block). `None`
+/// if the structure is shorter than the fields it must carry, or describes a block size outside
+/// what a driver of 4096-byte blocks can serve (`LBADS` below 9 is the specification's "unsupported"
+/// marker; above 12 a block would outgrow the transfer buffer).
 pub fn parse_identify_namespace(data: &[u8]) -> Option<IdentifyNamespace> {
     if data.len() < 384 {
         return None; // NSZE..the LBA format table must be present
@@ -24,7 +25,7 @@ pub fn parse_identify_namespace(data: &[u8]) -> Option<IdentifyNamespace> {
     })
 }
 
-/// **The LBA data shift the namespace is formatted with, whatever it is**: the same LBADS byte
+/// **The LBA data shift the namespace is formatted with, whatever it is**: the same `LBADS` byte
 /// [`parse_identify_namespace`] reads, before that function's bounds refuse it. `None` only when
 /// the structure is too short to carry the format table.
 ///
@@ -41,7 +42,7 @@ pub fn logical_block_address_format_shift(data: &[u8]) -> Option<u8> {
 
 /// See [`parse_identify_namespace`]. The struct is `#[non_exhaustive]`: a later release may read
 /// more of the structure, so code outside the crate gets one from the parse, or from
-/// [`Default`] as a placeholder before IDENTIFY has run.
+/// [`Default`] as a placeholder before Identify has run.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct IdentifyNamespace {
@@ -52,7 +53,7 @@ pub struct IdentifyNamespace {
 }
 
 impl Default for IdentifyNamespace {
-    /// An empty namespace of 512-byte blocks: the placeholder a driver holds before IDENTIFY has
+    /// An empty namespace of 512-byte blocks: the placeholder a driver holds before Identify has
     /// answered. It satisfies the same bounds as a parsed one (a shift between 9 and 12).
     fn default() -> Self {
         IdentifyNamespace {
@@ -100,7 +101,7 @@ mod tests {
     }
 
     /// A refused format still says what it was, which is what lets a caller print "8192-byte
-    /// LBAs" instead of "skipped". Read through FLBAS, so a namespace formatted with its second
+    /// LBAs" instead of "skipped". Read through `FLBAS`, so a namespace formatted with its second
     /// format reports that one rather than format 0.
     #[test]
     fn a_refused_lba_format_still_reports_its_shift() {
@@ -156,8 +157,8 @@ mod tests {
     }
 
     #[test]
-    fn identify_namespace_reads_the_logical_block_address_format_table_at_the_format_index_not_format_zero()
-     {
+    fn identify_namespace_reads_the_logical_block_format_table_at_the_format_index_not_format_zero()
+    {
         // The test above uses FLBAS=0, where the table offset `128 + 4*format_index` happens to equal
         // `128 - 4*format_index`: both are 128. Use FLBAS=1 so the two diverge, and plant a different,
         // still-valid LBADS at format 0's slot so a lane reading the wrong slot gets caught by

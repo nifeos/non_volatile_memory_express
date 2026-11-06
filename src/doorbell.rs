@@ -1,4 +1,4 @@
-//! **Doorbell addressing**: which BAR0 offset rings which queue.
+//! **Doorbell addressing**: which Base Address Register 0 (BAR0) offset rings which queue.
 
 use crate::registers;
 
@@ -48,7 +48,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn doorbells_land_where_the_spec_puts_them() {
+    fn doorbells_land_where_the_specification_puts_them() {
         // Sections 3.1.24 and 3.1.25 worked example, stride 0: SQ0 tail at 0x1000, CQ0 head at
         // 0x1004, SQ1 tail 0x1008, CQ1 head 0x100c.
         assert_eq!(doorbell(0, Doorbell::SubmissionTail, 0), 0x1000);

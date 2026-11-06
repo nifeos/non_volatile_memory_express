@@ -14,7 +14,7 @@ pub const CONTROLLER_CONFIGURATION_REGISTER: u64 = 0x14;
 #[doc(alias = "CSTS")]
 pub const CONTROLLER_STATUS_REGISTER: u64 = 0x1c;
 /// Admin Queue Attributes (the register the specification calls `AQA`):
-/// (ACQ entries - 1) << 16 | (ASQ entries - 1).
+/// (completion queue entries - 1) << 16 | (submission queue entries - 1).
 #[doc(alias = "AQA")]
 pub const ADMIN_QUEUE_ATTRIBUTES_REGISTER: u64 = 0x24;
 /// Admin Submission Queue Base Address (the register the specification calls `ASQ`), 64-bit,

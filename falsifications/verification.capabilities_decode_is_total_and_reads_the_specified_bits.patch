@@ -10,7 +10,7 @@ diff --git a/src/capabilities.rs b/src/capabilities.rs
 index c3cc63342..f87709c5e 100644
 --- a/src/capabilities.rs
 +++ b/src/capabilities.rs
-@@ -24,5 +24,5 @@ impl Capabilities {
+@@ -16,4 +16,4 @@ impl Capabilities {
      pub fn doorbell_stride(self) -> u32 {
 -        (self.0 >> 32) as u32 & 0xf
 +        (self.0 >> 32) as u32 & 0x1f

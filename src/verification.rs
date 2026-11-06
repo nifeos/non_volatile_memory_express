@@ -122,7 +122,7 @@ fn physical_region_page_pair_is_total_and_page_disciplined() {
 
 /// Falsification: replayable `falsifications/verification.a_transfer_command_is_only_built_for_a_block_the_namespace_has.patch`
 /// **No transfer command is built for a block outside its namespace, and none overflows
-/// computing one.** This is the bounds check a confined driver leans on: an IOMMU bounds where
+/// computing one.** This is the bounds check a confined driver leans on: an input-output memory management unit (IOMMU) bounds where
 /// the controller may *write*, and nothing but this bounds *which LBA* is asked for, so a
 /// caller-supplied `u64` must not be able to wrap into a valid-looking address.
 #[kani::proof]
