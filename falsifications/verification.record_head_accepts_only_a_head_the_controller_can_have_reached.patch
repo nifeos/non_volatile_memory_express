@@ -1,0 +1,25 @@
+Falsifies `non_volatile_memory_express::verification::record_head_accepts_only_a_head_the_controller_can_have_reached`.
+
+The defect: `SubmissionQueue::record_head` checks only that the reported head lies inside the ring,
+not that it lies between the recorded head and the tail. A controller that reports a head past the
+tail then frees slots holding commands it has not read, and the next push overwrites one.
+
+Expected to fail: the harness's `assert!(reachable)`.
+
+diff --git a/src/queues.rs b/src/queues.rs
+index a08ca91..2afb579 100644
+--- a/src/queues.rs
++++ b/src/queues.rs
+@@ -82,12 +82,6 @@ impl SubmissionQueue {
+         if head >= self.entries {
+             return Err(ImpossibleHeadError { head });
+         }
+-        // How far each value lies ahead of the recorded head, going round the ring.
+-        let entries = u32::from(self.entries);
+-        let ahead = |slot: u16| (u32::from(slot) + entries - u32::from(self.head)) % entries;
+-        if ahead(head) > ahead(self.tail) {
+-            return Err(ImpossibleHeadError { head });
+-        }
+         self.head = head;
+         Ok(())
+     }

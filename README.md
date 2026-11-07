@@ -44,11 +44,11 @@ directory. The harnesses pass on Kani 0.68.0. Ten harnesses live in the `verific
   dropped, doubled or read from the wrong place.
 - `record_head_accepts_only_a_head_the_controller_can_have_reached`: for any ring state and any
   head a controller reports, `SubmissionQueue::record_head` records the head only when it lies from
-  the recorded head forward, round the ring, to the tail, and otherwise returns
-  `ImpossibleHeadError` with the ring unchanged. No reported head panics the driver.
+  the recorded head forward, round the ring, to the tail. Any other head returns
+  `ImpossibleHeadError` with the ring unchanged, and no reported head panics the driver.
 - `blocks_per_transfer_never_truncates_the_count`: for any transfer unit and any accepted LBA
   shift, `IdentifyNamespace::blocks_per_transfer` returns a count of at least 1 that covers exactly
-  the unit, or `None`, so a unit of 65536 logical blocks or more never wraps to a count of 0.
+  the unit, or `None`. A unit of 65536 logical blocks or more never wraps to a count of 0.
 
 Each harness has a falsification record at `falsifications/<module.path>.<harness>.patch`.
 Apply one with `patch -p1` from the crate root, and that harness fails at its own assertion. The

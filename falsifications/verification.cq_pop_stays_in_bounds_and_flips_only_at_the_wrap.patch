@@ -9,7 +9,7 @@ diff --git a/src/queues.rs b/src/queues.rs
 index 71ae985..9f0b212 100644
 --- a/src/queues.rs
 +++ b/src/queues.rs
-@@ -124,7 +124,6 @@ impl CompletionQueue {
+@@ -184,7 +184,6 @@ impl CompletionQueue {
          self.head += 1;
          if self.head == self.entries {
              self.head = 0;
