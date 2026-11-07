@@ -162,7 +162,7 @@ mod tests {
     {
         // The test above uses FLBAS=0, where the table offset `128 + 4*format_index` happens to equal
         // `128 - 4*format_index`: both are 128. Use FLBAS=1 so the two diverge, and plant a different,
-        // still-valid LBADS at format 0's slot so a lane reading the wrong slot gets caught by
+        // still-valid LBADS at format 0's slot so a parser that reads the wrong slot is caught by
         // value rather than by accidentally landing on unset (and therefore refused) bytes.
         let mut data = [0u8; 384];
         data[0..8].copy_from_slice(&1u64.to_le_bytes());

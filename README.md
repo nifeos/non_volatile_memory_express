@@ -16,10 +16,16 @@ A block is the unit of storage a controller exposes.
 
 ## What is proven
 
+To build and test, install Rust 1.88 or newer (for example with `rustup`), then run `cargo build`
+and `cargo test` from the crate's directory. The test run also compiles the example below as a
+documentation test.
+
 To run the proofs, install Kani as its
-[installation guide](https://model-checking.github.io/kani/install-guide.html) says: install the
-`kani-verifier` crate, then run `cargo kani setup` once. Run `cargo kani` from the crate's
-directory. The harnesses pass on Kani 0.68.0. Eight harnesses live in the `verification` module:
+[installation guide](https://model-checking.github.io/kani/install-guide.html) says:
+`cargo install --locked kani-verifier --version 0.68.0`, then `cargo kani setup` once (it
+downloads a pinned nightly toolchain). Run `cargo kani` from the crate's directory. The harnesses
+pass on Kani 0.68.0; all eight take about 20 seconds in total on a laptop-class machine, after
+the setup. To run one, add `--harness <name>`. Eight harnesses live in the `verification` module:
 
 - `sq_push_stays_in_bounds`: a push onto any ring returns a slot inside the ring and leaves a legal
   tail, or returns `None` and changes nothing, and it returns `None` exactly when the ring is full.
@@ -44,8 +50,12 @@ directory. The harnesses pass on Kani 0.68.0. Eight harnesses live in the `verif
   dropped, doubled or read from the wrong place.
 
 Each harness has a falsification record at `falsifications/<module.path>.<harness>.patch`.
-Apply one with `patch -p1` from the crate root, and that harness fails at its own assertion. The
-failure shows that the proof checks something.
+Apply one with `patch -p1 < falsifications/<module.path>.<harness>.patch` from the crate root,
+then run `cargo kani --harness <harness>`. The patch makes that harness fail; its header names the
+assertion it expects to break. Kani may report a message it cannot print (a formatted assertion
+message is shown as a placeholder), or an additional overflow check alongside the named assertion.
+Undo the patch with `patch -R -p1 < <the same patch>`. The failure shows that the proof checks
+something.
 
 ## EXAMPLES
 
