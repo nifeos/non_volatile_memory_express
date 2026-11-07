@@ -6,10 +6,10 @@ becomes the status's lowest bit and every fresh completion on the first lap look
 Expected to fail: the harness's `assert!(completion.status < 1 << 15)`.
 
 diff --git a/src/completion.rs b/src/completion.rs
-index f5750f02c..337d95bb7 100644
+index 0a908d5..a1217fd 100644
 --- a/src/completion.rs
 +++ b/src/completion.rs
-@@ -35,7 +35,7 @@ impl Completion {
+@@ -29,7 +29,7 @@ impl Completion {
              submission_queue_id: (dwords[2] >> 16) as u16,
              command_id: dwords[3] as u16,
              phase: dwords[3] & (1 << 16) != 0,

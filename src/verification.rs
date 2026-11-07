@@ -122,7 +122,7 @@ fn physical_region_page_pair_is_total_and_page_disciplined() {
 
 /// Falsification: replayable `falsifications/verification.a_transfer_command_is_only_built_for_a_block_the_namespace_has.patch`
 /// **No transfer command is built for a block outside its namespace, and none overflows
-/// computing one.** This is the bounds check a confined driver leans on: an IOMMU bounds where
+/// computing one.** This is the bounds check a confined driver leans on: an input-output memory management unit (IOMMU) bounds where
 /// the controller may *write*, and nothing but this bounds *which LBA* is asked for, so a
 /// caller-supplied `u64` must not be able to wrap into a valid-looking address.
 #[kani::proof]
@@ -153,7 +153,7 @@ fn a_transfer_command_is_only_built_for_a_block_the_namespace_has() {
 fn identify_parse_is_total_and_bounds_the_shift() {
     let data: [u8; 384] = kani::any();
     if let Some(id) = parse_identify_namespace(&data) {
-        assert!((9..=12).contains(&id.logical_block_address_shift));
+        assert!((9..=12).contains(&id.logical_block_size_shift));
         let per = id.blocks_per_transfer(4096).unwrap();
         assert!((1..=8).contains(&per));
     }

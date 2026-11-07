@@ -4,7 +4,7 @@ use crate::command::Command;
 use crate::physical_region_page::physical_region_page_pair;
 
 /// **What a transfer needs to know about the namespace it addresses**: its capacity and how many
-/// logical blocks one transfer unit covers. A driver fills it once from IDENTIFY
+/// logical blocks one transfer unit covers. A driver fills it once from Identify
 /// ([`crate::IdentifyNamespace::capacity_bytes`], [`crate::IdentifyNamespace::blocks_per_transfer`])
 /// and asks it whether a block exists and for the command that moves one.
 ///
@@ -82,14 +82,14 @@ impl Namespace {
         if !self.holds_whole_block(block, unit) {
             return None;
         }
-        let starting_logical_block_address = block.checked_mul(self.blocks_per_transfer as u64)?;
+        let starting_logical_block = block.checked_mul(self.blocks_per_transfer as u64)?;
         let pages = physical_region_page_pair(data_physical_address, unit, page_size)?;
         let blocks = self.blocks_per_transfer;
         Some(if write {
             Command::write(
                 command_id,
                 namespace_id,
-                starting_logical_block_address,
+                starting_logical_block,
                 blocks,
                 pages,
             )
@@ -97,7 +97,7 @@ impl Namespace {
             Command::read(
                 command_id,
                 namespace_id,
-                starting_logical_block_address,
+                starting_logical_block,
                 blocks,
                 pages,
             )
@@ -115,9 +115,9 @@ mod tests {
     /// with a status the caller has to decode backwards.
     #[test]
     fn a_transfer_command_refuses_a_block_the_namespace_does_not_have() {
-        const SIZE: u64 = 8 * 1024 * 1024;
-        const LAST: u64 = SIZE / 4096 - 1;
-        let namespace = Namespace::new(SIZE, 8);
+        const SIZE_BYTES: u64 = 8 * 1024 * 1024;
+        const LAST: u64 = SIZE_BYTES / 4096 - 1;
+        let namespace = Namespace::new(SIZE_BYTES, 8);
         assert!(namespace.holds_whole_block(LAST, 4096));
         assert!(!namespace.holds_whole_block(LAST + 1, 4096));
         assert!(

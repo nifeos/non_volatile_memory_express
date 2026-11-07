@@ -6,10 +6,10 @@ the first reads stale entries as fresh.
 Expected to fail: the harness's `assert_eq!(queue.phase != phase, queue.head == 0)`.
 
 diff --git a/src/queues.rs b/src/queues.rs
-index a76fafaba..8b608f5ac 100644
+index 71ae985..9f0b212 100644
 --- a/src/queues.rs
 +++ b/src/queues.rs
-@@ -148,7 +148,6 @@ impl CompletionQueue {
+@@ -124,7 +124,6 @@ impl CompletionQueue {
          self.head += 1;
          if self.head == self.entries {
              self.head = 0;

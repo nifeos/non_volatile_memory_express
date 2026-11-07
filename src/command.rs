@@ -14,7 +14,7 @@ pub const ADMIN_CREATE_IO_COMPLETION_QUEUE: u8 = 0x05;
 /// [`CONTROLLER_OR_NAMESPACE_STRUCTURE_NAMESPACE`]).
 pub const ADMIN_IDENTIFY: u8 = 0x06;
 
-/// Non-volatile memory (NVM, the I/O command set's) opcodes (section 6). Flush is opcode 0, and it
+/// Non-volatile memory (NVM) I/O command set opcodes (section 6). Flush is opcode 0, and it
 /// is mandatory: section 6.8 requires every controller to implement it, so a caller can offer a
 /// flush unconditionally.
 #[doc(alias = "nvm")]
@@ -62,7 +62,7 @@ impl Command {
         Command(dwords)
     }
 
-    /// IDENTIFY (admin): the 4096-byte data structure named by `controller_or_namespace_structure`
+    /// Identify (admin): the 4096-byte data structure named by `controller_or_namespace_structure`
     /// lands at `physical_region_page`.
     pub fn identify(
         command_id: u16,
@@ -81,8 +81,8 @@ impl Command {
         command
     }
 
-    /// CREATE I/O COMPLETION QUEUE (admin): queue `queue_id`, `entries` deep, physically contiguous
-    /// (PC=1) at `physical_region_page`. Interrupts stay off (IEN=0): the driver completes by
+    /// Create I/O Completion Queue (admin): queue `queue_id`, `entries` deep, physically contiguous
+    /// (`PC`=1) at `physical_region_page`. Interrupts stay off (`IEN`=0): the driver completes by
     /// polling the phase tag, so no vector is named and none is needed.
     pub fn create_io_completion_queue(
         command_id: u16,
@@ -102,7 +102,7 @@ impl Command {
         command
     }
 
-    /// CREATE I/O SUBMISSION QUEUE (admin): queue `queue_id`, `entries` deep, physically contiguous at
+    /// Create I/O Submission Queue (admin): queue `queue_id`, `entries` deep, physically contiguous at
     /// `physical_region_page`, completing into completion queue `completion_queue_id` (which must already exist,
     /// so the pair is created completion queue first).
     pub fn create_io_submission_queue(
@@ -124,14 +124,14 @@ impl Command {
         command
     }
 
-    /// READ (I/O): `blocks` logical blocks starting at `starting_logical_block_address`, into the
+    /// Read (the NVM command set's I/O read): `blocks` logical blocks starting at `starting_logical_block`, into the
     /// pages `pages` names. `blocks` is the real count; the wire field is 0-based and this builder
     /// does the subtraction, so a caller cannot get the off-by-one wrong. `blocks` must be nonzero
     /// (asserted: zero would wrap to 65536).
     pub fn read(
         command_id: u16,
         namespace_id: u32,
-        starting_logical_block_address: u64,
+        starting_logical_block: u64,
         blocks: u16,
         pages: PhysicalRegionPagePair,
     ) -> Self {
@@ -139,7 +139,7 @@ impl Command {
             NON_VOLATILE_MEMORY_READ,
             command_id,
             namespace_id,
-            starting_logical_block_address,
+            starting_logical_block,
             blocks,
             pages,
         )
@@ -160,7 +160,7 @@ impl Command {
     pub fn write(
         command_id: u16,
         namespace_id: u32,
-        starting_logical_block_address: u64,
+        starting_logical_block: u64,
         blocks: u16,
         pages: PhysicalRegionPagePair,
     ) -> Self {
@@ -168,7 +168,7 @@ impl Command {
             NON_VOLATILE_MEMORY_WRITE,
             command_id,
             namespace_id,
-            starting_logical_block_address,
+            starting_logical_block,
             blocks,
             pages,
         )
@@ -179,7 +179,7 @@ impl Command {
         opcode: u8,
         command_id: u16,
         namespace_id: u32,
-        starting_logical_block_address: u64,
+        starting_logical_block: u64,
         blocks: u16,
         pages: PhysicalRegionPagePair,
     ) -> Self {
@@ -191,8 +191,8 @@ impl Command {
             pages.first_entry,
             pages.second_entry,
         );
-        command.0[10] = starting_logical_block_address as u32;
-        command.0[11] = (starting_logical_block_address >> 32) as u32;
+        command.0[10] = starting_logical_block as u32;
+        command.0[11] = (starting_logical_block >> 32) as u32;
         command.0[12] = (blocks - 1) as u32;
         command
     }
@@ -218,7 +218,7 @@ mod tests {
     }
 
     #[test]
-    fn a_read_command_encodes_the_spec_dwords() {
+    fn a_read_command_encodes_the_specified_dwords() {
         let command = Command::read(7, 1, 0x1_0000_0008, 8, pages(0xdead_b000, 0));
         assert_eq!(
             command.0[0],
@@ -240,7 +240,7 @@ mod tests {
     }
 
     #[test]
-    fn a_write_command_encodes_the_spec_dwords() {
+    fn a_write_command_encodes_the_specified_dwords() {
         // The mirror of the read test: `write` differs from `read` only in its opcode.
         let command = Command::write(7, 1, 0x1_0000_0008, 8, pages(0xdead_b000, 0));
         assert_eq!(

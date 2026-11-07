@@ -7,10 +7,10 @@ next page, which the controller is told it may read or write.
 Expected to fail: the harness's `assert_eq!(pair.second_entry, 0)` for `offset + length <= page`.
 
 diff --git a/src/physical_region_page.rs b/src/physical_region_page.rs
-index e3d3bd02b..1340ccbb8 100644
+index 6f53af9..398348b 100644
 --- a/src/physical_region_page.rs
 +++ b/src/physical_region_page.rs
-@@ -68,7 +68,7 @@ pub fn physical_region_page_pair(
+@@ -53,7 +53,7 @@ pub fn physical_region_page_pair(
      }
      let offset = base_physical_address & (page_size_bytes - 1);
      let end = offset.checked_add(length_bytes)?;

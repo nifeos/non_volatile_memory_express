@@ -34,7 +34,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn capabilities_fields_decode_from_their_spec_positions() {
+    fn capabilities_fields_decode_from_their_specified_positions() {
         // A default QEMU nvme device reports a value in this family: MQES=0x7ff, TO=0xf, DSTRD=0,
         // MPSMIN=0. Build one by hand and read every field back.
         let capabilities = Capabilities(0x7ffu64 | (0xf << 24) | (2 << 32) | (1 << 48));
