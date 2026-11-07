@@ -5,11 +5,17 @@
 //! decoded field to the bits the specification gives it, and drives a completion ring with the
 //! entries in order: an entry is consumed only when its phase tag matches the lap, and the head
 //! stays inside the ring and flips the expected phase exactly at each wrap.
+//!
+//! Alongside it runs a submission ring of the same depth. Before each entry the driver submits as
+//! many commands as the low byte of dword 1 asks (a reserved dword the controller should leave
+//! zero, so it is free for the fuzzer to steer), then records the entry's submission queue head,
+//! whatever the controller put there. `record_head` must accept exactly the heads that lie from the
+//! recorded head forward to the tail, and refuse every other value without changing the ring.
 
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use non_volatile_memory_express::{Completion, CompletionQueue};
+use non_volatile_memory_express::{Completion, CompletionQueue, SubmissionQueue};
 
 fuzz_target!(|data: &[u8]| {
     let Some((&depth, entries)) = data.split_first() else {
@@ -17,6 +23,7 @@ fuzz_target!(|data: &[u8]| {
     };
     let slots = u16::from(depth).max(2);
     let mut queue = CompletionQueue::new(slots);
+    let mut submission = SubmissionQueue::new(slots);
     let mut consumed = 0u32;
     for entry in entries.chunks_exact(16) {
         let dword = |i: usize| u32::from_le_bytes(entry[4 * i..4 * i + 4].try_into().unwrap());
@@ -34,6 +41,38 @@ fuzz_target!(|data: &[u8]| {
         assert_eq!(u32::from(completion.status), dwords[3] >> 17);
         assert!(completion.status < 1 << 15);
         assert_eq!(Completion::from_dwords(dwords), completion);
+
+        for _ in 0..dwords[1] & 0xff {
+            let tail = submission.tail();
+            match submission.push() {
+                Some(slot) => assert_eq!(slot, tail),
+                None => assert_eq!(
+                    (tail + 1) % slots,
+                    submission.head(),
+                    "refused a non-full ring"
+                ),
+            }
+        }
+        let ring = u32::from(slots);
+        let ahead = |slot: u16| (u32::from(slot) + ring - u32::from(submission.head())) % ring;
+        let reported = completion.submission_queue_head;
+        let reachable = reported < slots && ahead(reported) <= ahead(submission.tail());
+        let before = submission;
+        match submission.record_head(reported) {
+            Ok(()) => {
+                assert!(
+                    reachable,
+                    "accepted a head the controller cannot have reached"
+                );
+                assert_eq!(submission.head(), reported);
+                assert_eq!(submission.tail(), before.tail());
+            }
+            Err(error) => {
+                assert!(!reachable, "refused a head the controller can have reached");
+                assert_eq!(error.head, reported);
+                assert_eq!(submission, before, "a refused head changed the ring");
+            }
+        }
 
         if !queue.is_owned(&completion) {
             continue;

@@ -27,5 +27,5 @@ pub use doorbell::{Doorbell, doorbell};
 pub use identify::{IdentifyNamespace, logical_block_format_size_shift, parse_identify_namespace};
 pub use namespace::Namespace;
 pub use physical_region_page::{PhysicalRegionPagePair, physical_region_page_pair};
-pub use queues::{CompletionQueue, SubmissionQueue};
+pub use queues::{CompletionQueue, ImpossibleHeadError, SubmissionQueue};
 pub use registers::{CONTROLLER_STATUS_FATAL, CONTROLLER_STATUS_READY};

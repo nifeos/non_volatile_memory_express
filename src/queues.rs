@@ -46,15 +46,75 @@ impl SubmissionQueue {
         self.tail
     }
 
+    /// The controller's head as last recorded by [`SubmissionQueue::record_head`]: the oldest
+    /// slot the controller has not yet consumed.
+    pub fn head(&self) -> u16 {
+        self.head
+    }
+
     /// Record the controller's consumption, from a completion's `submission_queue_head`.
-    pub fn record_head(&mut self, head: u16) {
-        assert!(
-            head < self.entries,
-            "controller reported an impossible head"
-        );
+    ///
+    /// The value comes from the controller, so it is checked rather than trusted. The controller
+    /// consumes commands in order and never past the tail, so its head can only move forward from
+    /// the one last recorded, round the ring, as far as [`SubmissionQueue::tail`]. Any other value
+    /// (one outside the ring, one behind the recorded head, one past the tail) is an
+    /// [`ImpossibleHeadError`], and the ring is left as it was: accepting it would let
+    /// [`SubmissionQueue::push`] hand out slots holding commands the controller has not read.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use non_volatile_memory_express::SubmissionQueue;
+    ///
+    /// let mut queue = SubmissionQueue::new(4);
+    /// assert_eq!(queue.push(), Some(0));
+    /// assert_eq!(queue.push(), Some(1)); // the tail is now 2
+    ///
+    /// assert!(queue.record_head(1).is_ok()); // one command consumed
+    /// let before = queue;
+    /// assert!(queue.record_head(3).is_err()); // past the tail: never submitted
+    /// assert!(queue.record_head(0).is_err()); // behind the recorded head
+    /// assert!(queue.record_head(9).is_err()); // outside the ring
+    /// assert_eq!(queue, before, "a refused head changes nothing");
+    /// assert!(queue.record_head(2).is_ok()); // the controller caught up
+    /// ```
+    pub fn record_head(&mut self, head: u16) -> Result<(), ImpossibleHeadError> {
+        if head >= self.entries {
+            return Err(ImpossibleHeadError { head });
+        }
+        // How far each value lies ahead of the recorded head, going round the ring.
+        let entries = u32::from(self.entries);
+        let ahead = |slot: u16| (u32::from(slot) + entries - u32::from(self.head)) % entries;
+        if ahead(head) > ahead(self.tail) {
+            return Err(ImpossibleHeadError { head });
+        }
         self.head = head;
+        Ok(())
     }
 }
+
+/// **A submission queue head the controller cannot have reached**, refused by
+/// [`SubmissionQueue::record_head`]: outside the ring, behind the head already recorded, or past
+/// the tail. A controller that reports one is broken or hostile, and the driver decides what to do
+/// with it (reset the controller, fail the queue); the ring itself is unchanged.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct ImpossibleHeadError {
+    /// The head the controller reported.
+    pub head: u16,
+}
+
+impl core::fmt::Display for ImpossibleHeadError {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(
+            formatter,
+            "the controller reported submission queue head {}, which it cannot have reached",
+            self.head
+        )
+    }
+}
+
+impl core::error::Error for ImpossibleHeadError {}
 
 /// A completion ring's driver-side state: where the next completion will appear and which phase
 /// value marks it as fresh. The phase starts true (the ring starts zeroed, so the controller's
@@ -169,7 +229,7 @@ mod tests {
         for i in 0..12u16 {
             assert_eq!(queue.push(), Some(i % 4));
             assert_eq!(queue.tail(), (i + 1) % 4);
-            queue.record_head(queue.tail()); // the controller caught up
+            queue.record_head(queue.tail()).unwrap(); // the controller caught up
         }
     }
 
@@ -182,7 +242,74 @@ mod tests {
         assert_eq!(queue.push(), None);
         assert_eq!(queue, full, "a refused push leaves the ring as it was");
         // The controller consumes the command, and the ring accepts another.
-        queue.record_head(1);
+        queue.record_head(1).unwrap();
         assert_eq!(queue.push(), Some(1));
+    }
+
+    /// Every head a four-slot ring can be told, from every recorded head and tail: accepted
+    /// exactly when it lies between the two going round the ring, and refused otherwise with the
+    /// ring unchanged. The wrap cases (a tail behind the head in slot order) are where a plain
+    /// `head <= reported <= tail` comparison and the modular one part ways.
+    #[test]
+    fn record_head_accepts_exactly_the_heads_between_the_recorded_head_and_the_tail() {
+        for head in 0..4u16 {
+            for tail in 0..4u16 {
+                for reported in 0..6u16 {
+                    let mut queue = SubmissionQueue {
+                        entries: 4,
+                        tail,
+                        head,
+                    };
+                    let before = queue;
+                    let mut slot = head;
+                    let mut reachable = false;
+                    loop {
+                        reachable |= slot == reported;
+                        if slot == tail {
+                            break;
+                        }
+                        slot = (slot + 1) % 4;
+                    }
+                    let result = queue.record_head(reported);
+                    assert_eq!(
+                        result.is_ok(),
+                        reachable,
+                        "head {head}, tail {tail}, reported {reported}"
+                    );
+                    if reachable {
+                        assert_eq!(queue.head(), reported);
+                        assert_eq!(queue.tail(), tail);
+                    } else {
+                        assert_eq!(result, Err(ImpossibleHeadError { head: reported }));
+                        assert_eq!(queue, before, "a refused head changes nothing");
+                    }
+                }
+            }
+        }
+    }
+
+    /// The largest ring there is, so the modular distance cannot overflow on the way.
+    #[test]
+    fn record_head_on_the_largest_ring_wraps_without_overflow() {
+        let mut queue = SubmissionQueue {
+            entries: u16::MAX,
+            tail: 1,
+            head: u16::MAX - 1,
+        };
+        assert!(queue.record_head(u16::MAX).is_err(), "outside the ring");
+        assert!(queue.record_head(2).is_err(), "past the tail");
+        assert!(queue.record_head(0).is_ok(), "across the wrap");
+        assert_eq!(queue.head(), 0);
+    }
+
+    #[test]
+    fn an_impossible_head_says_which_head_it_was() {
+        extern crate std;
+        use std::string::ToString;
+        let error = SubmissionQueue::new(2).record_head(7).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "the controller reported submission queue head 7, which it cannot have reached"
+        );
     }
 }
