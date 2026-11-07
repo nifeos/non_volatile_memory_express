@@ -19,7 +19,7 @@ A block is the unit of storage a controller exposes.
 To run the proofs, install Kani as its
 [installation guide](https://model-checking.github.io/kani/install-guide.html) says: install the
 `kani-verifier` crate, then run `cargo kani setup` once. Run `cargo kani` from the crate's
-directory. The harnesses pass on Kani 0.68.0. Eight harnesses live in the `verification` module:
+directory. The harnesses pass on Kani 0.68.0. Ten harnesses live in the `verification` module:
 
 - `sq_push_stays_in_bounds`: a push onto any ring returns a slot inside the ring and leaves a legal
   tail, or returns `None` and changes nothing, and it returns `None` exactly when the ring is full.
@@ -42,6 +42,13 @@ directory. The harnesses pass on Kani 0.68.0. Eight harnesses live in the `verif
 - `completion_decode_is_total_and_rebuilds_dword_three`: for any four dwords, the command
   identifier, the phase tag and the 15-bit status field rebuild dword 3 exactly, so no bit is
   dropped, doubled or read from the wrong place.
+- `record_head_accepts_only_a_head_the_controller_can_have_reached`: for any ring state and any
+  head a controller reports, `SubmissionQueue::record_head` records the head only when it lies from
+  the recorded head forward, round the ring, to the tail. Any other head returns
+  `ImpossibleHeadError` with the ring unchanged, and no reported head panics the driver.
+- `blocks_per_transfer_never_truncates_the_count`: for any transfer unit and any accepted LBA
+  shift, `IdentifyNamespace::blocks_per_transfer` returns a count of at least 1 that covers exactly
+  the unit, or `None`. A unit of 65536 logical blocks or more never wraps to a count of 0.
 
 Each harness has a falsification record at `falsifications/<module.path>.<harness>.patch`.
 Apply one with `patch -p1` from the crate root, and that harness fails at its own assertion. The
@@ -71,7 +78,11 @@ assert_eq!(read.0[1], 1);
 // expected phase.
 let done = Completion::from_dwords([0, 1 | (1 << 16), 0, 1 | (1 << 16)]);
 assert!(completion_queue.is_owned(&done) && done.command_id == 1 && done.status == 0);
-submission_queue.record_head(done.submission_queue_head);
+// The head comes from the controller, so it is checked: an impossible one is an error to handle
+// (here, by giving up), never a panic.
+submission_queue
+    .record_head(done.submission_queue_head)
+    .expect("the controller consumed the command it was given");
 // Write the new head to doorbell(1, Doorbell::CompletionHead, stride).
 assert_eq!(completion_queue.pop(), 1);
 ```
@@ -87,10 +98,12 @@ assert_eq!(completion_queue.pop(), 1);
 - Not proven: the meaning of the status code and status code type inside a completion's status
   field, and anything in time, which belongs to the caller.
 - Three cargo-fuzz targets in `fuzz/` feed the decoders arbitrary controller bytes.
-  `identify_namespace` reads the Identify namespace structure and builds a transfer from it.
-  `completion` decodes completion queue entries and drives a ring with them. `capabilities`
-  decodes the `CAP` register and derives doorbell offsets and page pointers from it. Run one with
-  `cargo +nightly fuzz run <target>`; the weekly fuzz job runs all three for a bounded time.
+  `identify_namespace` reads the Identify namespace structure and builds a transfer from it, for
+  a 4096-byte unit and for a unit of any size. `completion` decodes completion queue entries,
+  drives a completion ring with them and records each entry's submission queue head.
+  `capabilities` decodes the `CAP` register and derives doorbell offsets and page pointers from it.
+  Run one with `cargo +nightly fuzz run <target>`; the weekly fuzz job runs all three for a bounded
+  time.
 
 The public structs that a later release may widen (`Completion`, `IdentifyNamespace` and
 `Namespace`) are `#[non_exhaustive]`. Build a `Namespace` with `Namespace::new`, and read the other

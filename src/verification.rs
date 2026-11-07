@@ -217,3 +217,66 @@ fn completion_decode_is_total_and_rebuilds_dword_three() {
         dwords[2]
     );
 }
+
+/// Falsification: replayable `falsifications/verification.record_head_accepts_only_a_head_the_controller_can_have_reached.patch`
+/// **No head a controller reports can panic the submission ring or corrupt it.** For any ring
+/// state and any reported head, `record_head` accepts exactly the heads that lie from the recorded
+/// head forward, round the ring, to the tail, and records them; every other value is refused with
+/// the ring unchanged, so a later push can never hand out a slot the controller has not read.
+#[kani::proof]
+fn record_head_accepts_only_a_head_the_controller_can_have_reached() {
+    let entries: u16 = kani::any();
+    let tail: u16 = kani::any();
+    let head: u16 = kani::any();
+    kani::assume(entries >= 2 && tail < entries && head < entries);
+    let mut queue = SubmissionQueue {
+        entries,
+        tail,
+        head,
+    };
+    let before = queue;
+    let reported: u16 = kani::any();
+    let ring = u32::from(entries);
+    let ahead = |slot: u16| (u32::from(slot) + ring - u32::from(head)) % ring;
+    let reachable = reported < entries && ahead(reported) <= ahead(tail);
+    match queue.record_head(reported) {
+        Ok(()) => {
+            assert!(reachable);
+            assert_eq!(queue.head(), reported);
+            assert_eq!(queue.tail(), tail);
+        }
+        Err(error) => {
+            assert!(!reachable);
+            assert_eq!(error.head, reported);
+            assert_eq!(queue, before);
+        }
+    }
+}
+
+/// Falsification: replayable `falsifications/verification.blocks_per_transfer_never_truncates_the_count.patch`
+/// **The blocks-per-transfer count is exact or refused, never truncated.** For any unit and any
+/// shift a parse accepts, an answer is at least 1 and covers exactly `unit` bytes, so no unit can
+/// wrap the 16-bit count to 0 (which the read and write builders refuse) or to a smaller transfer.
+#[kani::proof]
+fn blocks_per_transfer_never_truncates_the_count() {
+    let unit: u64 = kani::any();
+    let shift: u32 = kani::any();
+    kani::assume((9..=12).contains(&shift));
+    let namespace = IdentifyNamespace {
+        blocks: 0,
+        logical_block_size_shift: shift,
+    };
+    match namespace.blocks_per_transfer(unit) {
+        Some(blocks) => {
+            assert!(blocks >= 1);
+            assert_eq!(u64::from(blocks) << shift, unit);
+        }
+        None => {
+            assert!(
+                unit == 0
+                    || !unit.is_multiple_of(1 << shift)
+                    || unit >> shift > u64::from(u16::MAX)
+            );
+        }
+    }
+}
