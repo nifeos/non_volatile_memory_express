@@ -21,18 +21,18 @@ pub fn parse_identify_namespace(data: &[u8]) -> Option<IdentifyNamespace> {
     }
     Some(IdentifyNamespace {
         blocks: namespace_size,
-        logical_block_address_shift: data_shift as u32,
+        logical_block_size_shift: data_shift as u32,
     })
 }
 
-/// **The LBA data shift the namespace is formatted with, whatever it is**: the same `LBADS` byte
-/// [`parse_identify_namespace`] reads, before that function's bounds refuse it. `None` only when
-/// the structure is too short to carry the format table.
+/// **The LBA data shift the namespace is formatted with, whatever it is**: the same `LBADS`
+/// (LBA Data Size) byte [`parse_identify_namespace`] reads, before that function's bounds refuse
+/// it. `None` only when the structure is too short to carry the format table.
 ///
 /// It exists so a refusal can say what it refused. A drive must be formatted so that
 /// `blocks_per_transfer` falls in `1..=8`, and a namespace this driver declines has to print its
 /// LBA size rather than arrive as a server that never started and a test that reads "skipped".
-pub fn logical_block_address_format_shift(data: &[u8]) -> Option<u8> {
+pub fn logical_block_format_size_shift(data: &[u8]) -> Option<u8> {
     if data.len() < 384 {
         return None;
     }
@@ -48,8 +48,9 @@ pub fn logical_block_address_format_shift(data: &[u8]) -> Option<u8> {
 pub struct IdentifyNamespace {
     /// The namespace's size in logical blocks.
     pub blocks: u64,
-    /// `1 << logical_block_address_shift` bytes per logical block; between 9 and 12 by construction.
-    pub logical_block_address_shift: u32,
+    /// `1 << logical_block_size_shift` bytes per logical block; between 9 and 12 by construction.
+    /// The specification calls this exponent the LBA Data Size (`LBADS`).
+    pub logical_block_size_shift: u32,
 }
 
 impl Default for IdentifyNamespace {
@@ -58,7 +59,7 @@ impl Default for IdentifyNamespace {
     fn default() -> Self {
         IdentifyNamespace {
             blocks: 0,
-            logical_block_address_shift: 9,
+            logical_block_size_shift: 9,
         }
     }
 }
@@ -66,16 +67,16 @@ impl Default for IdentifyNamespace {
 impl IdentifyNamespace {
     /// The namespace's capacity in bytes.
     pub fn capacity_bytes(&self) -> u64 {
-        self.blocks << self.logical_block_address_shift
+        self.blocks << self.logical_block_size_shift
     }
     /// How many logical blocks one `unit`-byte transfer covers, or `None` if `unit` is not a
     /// whole number of logical blocks (a namespace this driver cannot serve 4096-byte blocks
     /// on; `parse_identify_namespace`'s shift bounds make it impossible for unit 4096).
     pub fn blocks_per_transfer(&self, unit: u64) -> Option<u16> {
-        if unit == 0 || unit & ((1 << self.logical_block_address_shift) - 1) != 0 {
+        if unit == 0 || unit & ((1 << self.logical_block_size_shift) - 1) != 0 {
             return None;
         }
-        Some((unit >> self.logical_block_address_shift) as u16)
+        Some((unit >> self.logical_block_size_shift) as u16)
     }
 }
 
@@ -91,7 +92,7 @@ mod tests {
         data[130] = 9; // format 0's LBADS: 512-byte blocks
         let id = parse_identify_namespace(&data).unwrap();
         assert_eq!(id.blocks, 0x4000);
-        assert_eq!(id.logical_block_address_shift, 9);
+        assert_eq!(id.logical_block_size_shift, 9);
         assert_eq!(id.capacity_bytes(), 0x4000 * 512);
         assert_eq!(id.blocks_per_transfer(4096), Some(8));
 
@@ -110,8 +111,8 @@ mod tests {
         data[130] = 9; // format 0: 512 bytes, not the one in use
         data[134] = 13; // format 1: 8192 bytes
         assert!(parse_identify_namespace(&data).is_none());
-        assert_eq!(logical_block_address_format_shift(&data), Some(13));
-        assert_eq!(logical_block_address_format_shift(&[0u8; 383]), None);
+        assert_eq!(logical_block_format_size_shift(&data), Some(13));
+        assert_eq!(logical_block_format_size_shift(&[0u8; 383]), None);
     }
 
     /// The shift is read at `128 + 4 * FLBAS + 2` for every format the nibble can name, from a
@@ -126,13 +127,13 @@ mod tests {
             }
             data[26] = format_index | 0x70; // the bits above the format number are not part of it
             assert_eq!(
-                logical_block_address_format_shift(&data),
+                logical_block_format_size_shift(&data),
                 Some(20 + format_index),
                 "format_index {format_index}"
             );
         }
         assert_eq!(
-            logical_block_address_format_shift(&[0u8; 384]),
+            logical_block_format_size_shift(&[0u8; 384]),
             Some(0),
             "384 bytes is enough"
         );
@@ -170,7 +171,7 @@ mod tests {
         data[128 + 4 + 2] = 11; // format 1's LBADS: the one that must be read
         let id = parse_identify_namespace(&data).unwrap();
         assert_eq!(
-            id.logical_block_address_shift, 11,
+            id.logical_block_size_shift, 11,
             "format 1's slot, not format 0's"
         );
     }
@@ -183,7 +184,7 @@ mod tests {
         // calls `blocks_per_transfer(0)` either.
         let id = IdentifyNamespace {
             blocks: 1,
-            logical_block_address_shift: 9, // 512-byte blocks; mask is 511
+            logical_block_size_shift: 9, // 512-byte blocks; mask is 511
         };
         assert_eq!(
             id.blocks_per_transfer(0),

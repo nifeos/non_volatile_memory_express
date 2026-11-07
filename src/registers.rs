@@ -20,11 +20,11 @@ pub const ADMIN_QUEUE_ATTRIBUTES_REGISTER: u64 = 0x24;
 /// Admin Submission Queue Base Address (the register the specification calls `ASQ`), 64-bit,
 /// page-aligned physical.
 #[doc(alias = "ASQ")]
-pub const ADMIN_SUBMISSION_QUEUE_BASE_ADDRESS_REGISTER: u64 = 0x28;
+pub const ADMIN_SUBMISSION_QUEUE_BASE_PHYSICAL_ADDRESS_REGISTER: u64 = 0x28;
 /// Admin Completion Queue Base Address (the register the specification calls `ACQ`), 64-bit,
 /// page-aligned physical.
 #[doc(alias = "ACQ")]
-pub const ADMIN_COMPLETION_QUEUE_BASE_ADDRESS_REGISTER: u64 = 0x30;
+pub const ADMIN_COMPLETION_QUEUE_BASE_PHYSICAL_ADDRESS_REGISTER: u64 = 0x30;
 /// The first doorbell. Doorbell N is at `DOORBELL_BASE + N * (4 << CAP.DSTRD)`; see
 /// [`crate::doorbell`].
 pub const DOORBELL_BASE: u64 = 0x1000;

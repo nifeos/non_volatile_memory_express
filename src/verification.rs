@@ -153,7 +153,7 @@ fn a_transfer_command_is_only_built_for_a_block_the_namespace_has() {
 fn identify_parse_is_total_and_bounds_the_shift() {
     let data: [u8; 384] = kani::any();
     if let Some(id) = parse_identify_namespace(&data) {
-        assert!((9..=12).contains(&id.logical_block_address_shift));
+        assert!((9..=12).contains(&id.logical_block_size_shift));
         let per = id.blocks_per_transfer(4096).unwrap();
         assert!((1..=8).contains(&per));
     }

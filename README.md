@@ -83,7 +83,7 @@ assert_eq!(completion_queue.pop(), 1);
 - `physical_region_page_pair` covers at most two pages. A transfer that needs a PRP list returns
   `None`.
 - `parse_identify_namespace` refuses LBA formats outside 512 bytes to 4 KiB per block.
-  `logical_block_address_format_shift` reports the shift it refused.
+  `logical_block_format_size_shift` reports the shift it refused.
 - Not proven: the meaning of the status code and status code type inside a completion's status
   field, and anything in time, which belongs to the caller.
 - This repository has no fuzz targets yet.

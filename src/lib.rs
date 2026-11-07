@@ -24,9 +24,7 @@ pub use command::{
 pub use completion::Completion;
 pub use configuration::enabled_controller_configuration;
 pub use doorbell::{Doorbell, doorbell};
-pub use identify::{
-    IdentifyNamespace, logical_block_address_format_shift, parse_identify_namespace,
-};
+pub use identify::{IdentifyNamespace, logical_block_format_size_shift, parse_identify_namespace};
 pub use namespace::Namespace;
 pub use physical_region_page::{PhysicalRegionPagePair, physical_region_page_pair};
 pub use queues::{CompletionQueue, SubmissionQueue};
