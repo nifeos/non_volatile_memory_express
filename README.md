@@ -86,7 +86,11 @@ assert_eq!(completion_queue.pop(), 1);
   `logical_block_format_size_shift` reports the shift it refused.
 - Not proven: the meaning of the status code and status code type inside a completion's status
   field, and anything in time, which belongs to the caller.
-- This repository has no fuzz targets yet.
+- Three cargo-fuzz targets in `fuzz/` feed the decoders arbitrary controller bytes.
+  `identify_namespace` reads the Identify namespace structure and builds a transfer from it.
+  `completion` decodes completion queue entries and drives a ring with them. `capabilities`
+  decodes the `CAP` register and derives doorbell offsets and page pointers from it. Run one with
+  `cargo +nightly fuzz run <target>`; the weekly fuzz job runs all three for a bounded time.
 
 The public structs that a later release may widen (`Completion`, `IdentifyNamespace` and
 `Namespace`) are `#[non_exhaustive]`. Build a `Namespace` with `Namespace::new`, and read the other
