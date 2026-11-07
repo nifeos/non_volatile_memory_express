@@ -9,10 +9,12 @@ Expected to fail: the harness's `assert!((block + 1) * 4096 <= namespace.capacit
 are the same escape seen from the harness's side.
 
 diff --git a/src/namespace.rs b/src/namespace.rs
-index 7c43fc3d0..4fb88f4b1 100644
+index 6477d27..94b2d51 100644
 --- a/src/namespace.rs
 +++ b/src/namespace.rs
-@@ -63,6 +63,5 @@ impl Namespace {
+@@ -51,8 +51,7 @@ impl Namespace {
+     /// `false` for any `block` whose transfer would run past [`Namespace::capacity_bytes`], for one
+     /// whose end overflows a `u64`, and for a `unit` of zero.
      pub fn holds_whole_block(&self, block: u64, unit: u64) -> bool {
 -        match block
 -            .checked_add(1)

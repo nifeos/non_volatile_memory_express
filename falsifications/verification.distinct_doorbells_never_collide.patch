@@ -7,10 +7,12 @@ head write then lands on a tail.
 Expected to fail: the harness's `assert!(doorbell(first_queue_id, first_role, doorbell_stride) != doorbell(second_queue_id, second_role, doorbell_stride))`.
 
 diff --git a/src/doorbell.rs b/src/doorbell.rs
-index 7fb2db308..8c07ec708 100644
+index c06165b..7ca13d0 100644
 --- a/src/doorbell.rs
 +++ b/src/doorbell.rs
-@@ -41,5 +41,5 @@ pub enum Doorbell {
+@@ -35,7 +35,7 @@ pub enum Doorbell {
+ /// assert_eq!(doorbell(1, Doorbell::CompletionHead, 0), 0x100c);
+ /// ```
  pub fn doorbell(queue_id: u16, which: Doorbell, doorbell_stride: u32) -> u64 {
 -    let index = 2 * queue_id as u64
 +    let index = queue_id as u64

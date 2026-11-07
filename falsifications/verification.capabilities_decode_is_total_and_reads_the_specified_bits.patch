@@ -7,13 +7,15 @@ back to four bits, so the damage would be a quietly wrong offset rather than a p
 Expected to fail: the harness's `assert!(capabilities.doorbell_stride() <= 15)`.
 
 diff --git a/src/capabilities.rs b/src/capabilities.rs
-index c3cc63342..f87709c5e 100644
+index 30ddda8..aac3b73 100644
 --- a/src/capabilities.rs
 +++ b/src/capabilities.rs
-@@ -16,4 +16,4 @@ impl Capabilities {
+@@ -14,7 +14,7 @@ impl Capabilities {
+     /// Doorbell Stride: doorbell N is at `0x1000 + N * (4 << DSTRD)` (a 4-bit field, so the shift
+     /// is at most 19 and the multiply cannot overflow a u64 for any real doorbell index).
      pub fn doorbell_stride(self) -> u32 {
 -        (self.0 >> 32) as u32 & 0xf
 +        (self.0 >> 32) as u32 & 0x1f
      }
      /// Timeout for the ready bit to follow the enable bit, in units of 500 milliseconds.
-     ///
+     #[doc(alias = "CAP.TO")]
