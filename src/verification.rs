@@ -262,15 +262,21 @@ fn blocks_per_transfer_never_truncates_the_count() {
     let unit: u64 = kani::any();
     let shift: u32 = kani::any();
     kani::assume((9..=12).contains(&shift));
-    let mut namespace = IdentifyNamespace::default();
-    namespace.logical_block_size_shift = shift;
+    let namespace = IdentifyNamespace {
+        blocks: 0,
+        logical_block_size_shift: shift,
+    };
     match namespace.blocks_per_transfer(unit) {
         Some(blocks) => {
             assert!(blocks >= 1);
             assert_eq!(u64::from(blocks) << shift, unit);
         }
         None => {
-            assert!(unit == 0 || unit % (1 << shift) != 0 || unit >> shift > u64::from(u16::MAX))
+            assert!(
+                unit == 0
+                    || !unit.is_multiple_of(1 << shift)
+                    || unit >> shift > u64::from(u16::MAX)
+            );
         }
     }
 }
