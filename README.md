@@ -1,5 +1,10 @@
 # `non_volatile_memory_express`
 
+[![check](https://github.com/nifeos/non_volatile_memory_express/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/nifeos/non_volatile_memory_express/actions/workflows/ci.yml?query=branch%3Amain)
+[![proofs](https://github.com/nifeos/non_volatile_memory_express/actions/workflows/proofs.yml/badge.svg?branch=main)](https://github.com/nifeos/non_volatile_memory_express/actions/workflows/proofs.yml?query=branch%3Amain)
+[![license](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](https://github.com/nifeos/non_volatile_memory_express#license)
+[![minimum Rust version](https://img.shields.io/badge/rust-1.88%2B-blue.svg)](https://github.com/nifeos/non_volatile_memory_express/blob/main/Cargo.toml)
+
 The queue mechanics of an `NVMe` (Non-Volatile Memory Express) driver, as pure logic. It covers
 register field decode, command building, submission and completion ring arithmetic with the phase
 tag, doorbell addressing, Physical Region Page (PRP) construction and Identify namespace parsing.
