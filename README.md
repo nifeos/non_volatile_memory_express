@@ -14,46 +14,6 @@ PRP1 and PRP2. A longer transfer points PRP2 at a list of more entries, which th
 build. A logical block address (LBA) numbers the fixed-size blocks of a namespace, counting from 0.
 A block is the unit of storage a controller exposes.
 
-## What is proven
-
-To run the proofs, install Kani as its
-[installation guide](https://model-checking.github.io/kani/install-guide.html) says: install the
-`kani-verifier` crate, then run `cargo kani setup` once. Run `cargo kani` from the crate's
-directory. The harnesses pass on Kani 0.68.0. Ten harnesses live in the `verification` module:
-
-- `sq_push_stays_in_bounds`: a push onto any ring returns a slot inside the ring and leaves a legal
-  tail, or returns `None` and changes nothing, and it returns `None` exactly when the ring is full.
-- `cq_pop_stays_in_bounds_and_flips_only_at_the_wrap`: a completion pop keeps the head inside the
-  ring, and the expected phase flips exactly once per lap.
-- `distinct_doorbells_never_collide`: two different (queue, role) pairs never share a doorbell
-  offset, for every stride a controller may report.
-- `physical_region_page_pair_is_total_and_page_disciplined`: for any base, length and page size,
-  the pair either refuses or covers the transfer; the second entry is zero when one page suffices,
-  and otherwise the page boundary right after the base.
-- `a_transfer_command_is_only_built_for_a_block_the_namespace_has`: `Namespace::transfer_command`
-  builds a command only for a block whose last byte lies inside the namespace, and never overflows
-  computing its LBA, for any block number, buffer address and namespace size.
-- `identify_parse_is_total_and_bounds_the_shift`: no controller response panics the Identify
-  namespace parse, and every accepted LBA shift lies between 9 and 12, so a 4 KiB transfer covers
-  1 to 8 logical blocks.
-- `capabilities_decode_is_total_and_reads_the_specified_bits`: for any value of the capabilities
-  register, every `Capabilities` field lies in the range its width allows and equals the bits at
-  its place in the register.
-- `completion_decode_is_total_and_rebuilds_dword_three`: for any four dwords, the command
-  identifier, the phase tag and the 15-bit status field rebuild dword 3 exactly, so no bit is
-  dropped, doubled or read from the wrong place.
-- `record_head_accepts_only_a_head_the_controller_can_have_reached`: for any ring state and any
-  head a controller reports, `SubmissionQueue::record_head` records the head only when it lies from
-  the recorded head forward, round the ring, to the tail. Any other head returns
-  `ImpossibleHeadError` with the ring unchanged, and no reported head panics the driver.
-- `blocks_per_transfer_never_truncates_the_count`: for any transfer unit and any accepted LBA
-  shift, `IdentifyNamespace::blocks_per_transfer` returns a count of at least 1 that covers exactly
-  the unit, or `None`. A unit of 65536 logical blocks or more never wraps to a count of 0.
-
-Each harness has a falsification record at `falsifications/<module.path>.<harness>.patch`.
-Apply one with `patch -p1` from the crate root, and that harness fails at its own assertion. The
-failure shows that the proof checks something.
-
 ## EXAMPLES
 
 ```rust
@@ -86,6 +46,56 @@ submission_queue
 // Write the new head to doorbell(1, Doorbell::CompletionHead, stride).
 assert_eq!(completion_queue.pop(), 1);
 ```
+
+## What is proven
+
+To build and test, install Rust 1.88 or newer (for example with `rustup`), then run `cargo build`
+and `cargo test` from the crate's directory. The test run also compiles the example below as a
+documentation test.
+
+To run the proofs, install Kani as its
+[installation guide](https://model-checking.github.io/kani/install-guide.html) says:
+`cargo install --locked kani-verifier --version 0.68.0`, then `cargo kani setup` once (it
+downloads a pinned nightly toolchain). Run `cargo kani` from the crate's directory. The harnesses
+pass on Kani 0.68.0; all ten take about 20 seconds in total on a laptop-class machine, after
+the setup. To run one, add `--harness <name>`. Ten harnesses live in the `verification` module:
+
+- `sq_push_stays_in_bounds`: a push onto any ring returns a slot inside the ring and leaves a legal
+  tail, or returns `None` and changes nothing, and it returns `None` exactly when the ring is full.
+- `cq_pop_stays_in_bounds_and_flips_only_at_the_wrap`: a completion pop keeps the head inside the
+  ring, and the expected phase flips exactly once per lap.
+- `distinct_doorbells_never_collide`: two different (queue, role) pairs never share a doorbell
+  offset, for every stride a controller may report.
+- `physical_region_page_pair_is_total_and_page_disciplined`: for any base, length and page size,
+  the pair either refuses or covers the transfer; the second entry is zero when one page suffices,
+  and otherwise the page boundary right after the base.
+- `a_transfer_command_is_only_built_for_a_block_the_namespace_has`: `Namespace::transfer_command`
+  builds a command only for a block whose last byte lies inside the namespace, and never overflows
+  computing its LBA, for any block number, buffer address and namespace size.
+- `identify_parse_is_total_and_bounds_the_shift`: no controller response panics the Identify
+  namespace parse, and every accepted LBA shift lies between 9 and 12, so a 4 KiB transfer covers
+  1 to 8 logical blocks.
+- `capabilities_decode_is_total_and_reads_the_specified_bits`: for any value of the capabilities
+  register, every `Capabilities` field lies in the range its width allows and equals the bits at
+  its place in the register.
+- `completion_decode_is_total_and_rebuilds_dword_three`: for any four dwords, the command
+  identifier, the phase tag and the 15-bit status field rebuild dword 3 exactly, so the decode
+  loses no bit, doubles none and reads none from the wrong place.
+- `record_head_accepts_only_a_head_the_controller_can_have_reached`: for any ring state and any
+  head a controller reports, `SubmissionQueue::record_head` records the head only when it lies from
+  the recorded head forward, round the ring, to the tail. Any other head returns
+  `ImpossibleHeadError` with the ring unchanged, and no reported head panics the driver.
+- `blocks_per_transfer_never_truncates_the_count`: for any transfer unit and any accepted LBA
+  shift, `IdentifyNamespace::blocks_per_transfer` returns a count of at least 1 that covers exactly
+  the unit, or `None`. A unit of 65536 logical blocks or more never wraps to a count of 0.
+
+Each harness has a falsification record at `falsifications/<module.path>.<harness>.patch`.
+Apply one with `patch -p1 < falsifications/<module.path>.<harness>.patch` from the crate root,
+then run `cargo kani --harness <harness>`. The patch makes that harness fail; its header names the
+assertion it expects to break. Kani may report a message it cannot print (it shows a formatted assertion
+message as a placeholder), or an additional overflow check alongside the named assertion.
+Undo the patch with `patch -R -p1 < <the same patch>`. The failure shows that the proof checks
+something.
 
 ## BUGS
 
