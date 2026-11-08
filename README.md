@@ -55,14 +55,14 @@ assert_eq!(completion_queue.pop(), 1);
 ## What is proven
 
 To build and test, install Rust 1.88 or newer (for example with `rustup`), then run `cargo build`
-and `cargo test` from the crate's directory. The test run also compiles the example below as a
+and `cargo test` from the crate's directory. The test run also compiles the example above as a
 documentation test.
 
 To run the proofs, install Kani as its
 [installation guide](https://model-checking.github.io/kani/install-guide.html) says:
 `cargo install --locked kani-verifier --version 0.68.0`, then `cargo kani setup` once (it
 downloads a pinned nightly toolchain). Run `cargo kani` from the crate's directory. The harnesses
-pass on Kani 0.68.0; all ten take about 20 seconds in total on a laptop-class machine, after
+pass on Kani 0.68.0; all ten take about 30 seconds in total on a laptop-class machine, after
 the setup. To run one, add `--harness <name>`. Ten harnesses live in the `verification` module:
 
 - `sq_push_stays_in_bounds`: a push onto any ring returns a slot inside the ring and leaves a legal
