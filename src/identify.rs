@@ -69,14 +69,29 @@ impl IdentifyNamespace {
     pub fn capacity_bytes(&self) -> u64 {
         self.blocks << self.logical_block_size_shift
     }
-    /// How many logical blocks one `unit`-byte transfer covers, or `None` if `unit` is not a
-    /// whole number of logical blocks (a namespace this driver cannot serve 4096-byte blocks
-    /// on; `parse_identify_namespace`'s shift bounds make it impossible for unit 4096).
+    /// How many logical blocks one `unit`-byte transfer covers, always at least 1. `None` if
+    /// `unit` is zero, is not a whole number of logical blocks (a namespace this driver cannot
+    /// serve 4096-byte blocks on; `parse_identify_namespace`'s shift bounds make it impossible for
+    /// unit 4096), or covers more than the 65535 logical blocks a `u16` count holds (a unit of
+    /// 65536 blocks or more, which would otherwise wrap to a count of 0 that
+    /// [`crate::Command::read`] and [`crate::Command::write`] refuse).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use non_volatile_memory_express::IdentifyNamespace;
+    ///
+    /// let namespace = IdentifyNamespace::default(); // 512-byte logical blocks
+    /// assert_eq!(namespace.blocks_per_transfer(4096), Some(8));
+    /// assert_eq!(namespace.blocks_per_transfer(65_535 * 512), Some(65_535));
+    /// assert_eq!(namespace.blocks_per_transfer(65_536 * 512), None); // too many to count
+    /// assert_eq!(namespace.blocks_per_transfer(1000), None); // not a whole number of blocks
+    /// ```
     pub fn blocks_per_transfer(&self, unit: u64) -> Option<u16> {
         if unit == 0 || unit & ((1 << self.logical_block_size_shift) - 1) != 0 {
             return None;
         }
-        Some((unit >> self.logical_block_size_shift) as u16)
+        u16::try_from(unit >> self.logical_block_size_shift).ok()
     }
 }
 
@@ -195,5 +210,35 @@ mod tests {
         // mask (513) and the `/1` mutant's mask (512) both share bit 9 with 1536 and would
         // wrongly refuse it.
         assert_eq!(id.blocks_per_transfer(1536), Some(3));
+    }
+
+    /// The count is a `u16`, so a unit of 65536 logical blocks or more is refused rather than
+    /// truncated: 65536 would wrap to 0, which no command can carry, and 65537 to 1, which would
+    /// move one block where the caller asked for a great many. Checked at every shift a parse
+    /// accepts, right on either side of the limit.
+    #[test]
+    fn blocks_per_transfer_refuses_a_unit_too_large_to_count_rather_than_wrapping() {
+        for shift in 9..=12u32 {
+            let id = IdentifyNamespace {
+                blocks: 1,
+                logical_block_size_shift: shift,
+            };
+            let block = 1u64 << shift;
+            assert_eq!(
+                id.blocks_per_transfer(u64::from(u16::MAX) * block),
+                Some(u16::MAX)
+            );
+            assert_eq!(
+                id.blocks_per_transfer(65_536 * block),
+                None,
+                "shift {shift}"
+            );
+            assert_eq!(
+                id.blocks_per_transfer(65_537 * block),
+                None,
+                "shift {shift}"
+            );
+            assert_eq!(id.blocks_per_transfer(!(block - 1)), None);
+        }
     }
 }

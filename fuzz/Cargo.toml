@@ -1,0 +1,40 @@
+# The cargo-fuzz targets, in a workspace of their own so that `cargo build` and `cargo test` at the
+# root never build them. They need nightly: `cargo +nightly fuzz run <target>`.
+
+[package]
+name = "non_volatile_memory_express-fuzz"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[dependencies.non_volatile_memory_express]
+path = ".."
+
+[[bin]]
+name = "identify_namespace"
+path = "fuzz_targets/identify_namespace.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "completion"
+path = "fuzz_targets/completion.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "capabilities"
+path = "fuzz_targets/capabilities.rs"
+test = false
+doc = false
+bench = false
+
+[workspace]
