@@ -16,7 +16,7 @@ pub enum Doorbell {
 ///
 /// The stride scales the whole doorbell file: `CAP.DSTRD` is four bits, so a controller may space
 /// its doorbells as far as `4 << 15` bytes apart, and queue 1's doorbells then sit hundreds of
-/// kilobytes past `DOORBELL_BASE`. A caller that maps less of BAR0 than the doorbells it rings
+/// kilobytes past `FIRST_DOORBELL_REGISTER`. A caller that maps less of BAR0 than the doorbells it rings
 /// refuses the strides that reach past its mapping.
 ///
 /// # Examples
@@ -40,7 +40,7 @@ pub fn doorbell(queue_id: u16, which: Doorbell, doorbell_stride: u32) -> u64 {
             Doorbell::SubmissionTail => 0,
             Doorbell::CompletionHead => 1,
         };
-    registers::DOORBELL_BASE + index * (4u64 << (doorbell_stride & 0xf))
+    registers::FIRST_DOORBELL_REGISTER + index * (4u64 << (doorbell_stride & 0xf))
 }
 
 #[cfg(test)]

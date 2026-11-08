@@ -37,7 +37,7 @@ fuzz_target!(|data: &[u8]| {
     let completion = doorbell(queue_id, Doorbell::CompletionHead, stride);
     assert_eq!(
         submission,
-        registers::DOORBELL_BASE + 2 * u64::from(queue_id) * spacing
+        registers::FIRST_DOORBELL_REGISTER + 2 * u64::from(queue_id) * spacing
     );
     assert_eq!(completion, submission + spacing);
 
