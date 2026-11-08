@@ -4,7 +4,7 @@
 /// Controller Capabilities (the register the specification calls `CAP`), 64-bit read-only.
 /// See [`crate::Capabilities`].
 #[doc(alias = "CAP")]
-pub const CAPABILITIES: u64 = 0x00;
+pub const CONTROLLER_CAPABILITIES_REGISTER: u64 = 0x00;
 /// Controller Configuration (the register the specification calls `CC`), 32-bit. See
 /// [`crate::enabled_controller_configuration`].
 #[doc(alias = "CC")]
@@ -25,15 +25,15 @@ pub const ADMIN_SUBMISSION_QUEUE_BASE_PHYSICAL_ADDRESS_REGISTER: u64 = 0x28;
 /// page-aligned physical.
 #[doc(alias = "ACQ")]
 pub const ADMIN_COMPLETION_QUEUE_BASE_PHYSICAL_ADDRESS_REGISTER: u64 = 0x30;
-/// The first doorbell. Doorbell N is at `DOORBELL_BASE + N * (4 << CAP.DSTRD)`; see
+/// The first doorbell. Doorbell N is at `FIRST_DOORBELL_REGISTER + N * (4 << CAP.DSTRD)`; see
 /// [`crate::doorbell`].
-pub const DOORBELL_BASE: u64 = 0x1000;
+pub const FIRST_DOORBELL_REGISTER: u64 = 0x1000;
 
 /// Controller Status bit 0 (`CSTS.RDY`): the controller has come up (after the enable bit of
 /// Controller Configuration is set) or gone down (after it is cleared).
 #[doc(alias = "CSTS.RDY")]
 #[doc(alias = "RDY")]
-pub const CONTROLLER_STATUS_READY: u32 = 1;
+pub const CONTROLLER_STATUS_READY: u32 = 1 << 0;
 /// Controller Status bit 1 (`CSTS.CFS`, Controller Fatal Status): the controller gave up, and no
 /// doorbell will help.
 #[doc(alias = "CSTS.CFS")]
