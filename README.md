@@ -49,7 +49,7 @@ assert_eq!(read.0[1], 1);
 // submission queue head 1 (it consumed the command in slot 0) for submission queue 1, and echoes
 // command identifier 1 with status 0.
 let dword_three = 1 | (1 << 16);
-assert_eq!(Completion::phase_of(dword_three), completion_queue.expected_phase());
+assert_eq!(Completion::is_phase_tag_set(dword_three), completion_queue.expects_phase_tag_set());
 let done = Completion::from_dwords([0, 0, 1 | (1 << 16), dword_three]);
 assert!(completion_queue.is_owned(&done)); // the phase tag only
 // Ownership says the entry is fresh, not that it answers a command this driver issued: match the
@@ -100,7 +100,7 @@ module:
 - `identify_controller_parse_is_total_and_reads_its_bytes`: no controller response panics the
   Identify Controller parse. Every answer of 520 bytes or more is accepted, with the transfer limit
   read from byte 77 and the namespace count from bytes 516 to 519. The limit in bytes is the
-  minimum page shifted by the exponent, or `u64::MAX` when there is none or it does not fit.
+  minimum page shifted by that shift, or `u64::MAX` when there is none or it does not fit.
 - `capabilities_decode_is_total_and_reads_the_specified_bits`: for any value of the capabilities
   register, every `Capabilities` field lies in the range its width allows and equals the bits at
   its place in the register.

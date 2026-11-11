@@ -211,7 +211,7 @@ fn identify_controller_parse_is_total_and_reads_its_bytes() {
     let Some(controller) = parsed else {
         return;
     };
-    assert_eq!(controller.maximum_data_transfer_size_exponent, data[77]);
+    assert_eq!(controller.maximum_data_transfer_size_shift, data[77]);
     assert_eq!(
         controller.maximum_namespace_id,
         u32::from_le_bytes([data[516], data[517], data[518], data[519]])
@@ -374,11 +374,11 @@ fn completion_status_parts_rebuild_the_status_field() {
     let rebuilt = u16::from(completion.status_code())
         | u16::from(completion.status_code_type()) << 8
         | u16::from(completion.command_retry_delay()) << 11
-        | u16::from(completion.more()) << 13
-        | u16::from(completion.do_not_retry()) << 14;
+        | u16::from(completion.is_more_set()) << 13
+        | u16::from(completion.is_do_not_retry_set()) << 14;
     assert_eq!(rebuilt, completion.status);
     assert_eq!(completion.is_success(), dword_three >> 17 == 0);
-    assert_eq!(Completion::phase_of(dword_three), completion.phase);
+    assert_eq!(Completion::is_phase_tag_set(dword_three), completion.phase);
 }
 
 /// Falsification: replayable `falsifications/verification.no_command_identifier_releases_twice.patch`
