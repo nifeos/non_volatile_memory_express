@@ -211,7 +211,7 @@ fn identify_controller_parse_is_total_and_reads_its_bytes() {
     let Some(controller) = parsed else {
         return;
     };
-    assert_eq!(controller.maximum_data_transfer_size_exponent, data[77]);
+    assert_eq!(controller.maximum_data_transfer_size_shift, data[77]);
     assert_eq!(
         controller.maximum_namespace_id,
         u32::from_le_bytes([data[516], data[517], data[518], data[519]])
