@@ -3,7 +3,7 @@
 [![check](https://github.com/nifeos/non_volatile_memory_express/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/nifeos/non_volatile_memory_express/actions/workflows/ci.yml?query=branch%3Amain)
 [![proofs](https://github.com/nifeos/non_volatile_memory_express/actions/workflows/proofs.yml/badge.svg?branch=main)](https://github.com/nifeos/non_volatile_memory_express/actions/workflows/proofs.yml?query=branch%3Amain)
 [![license](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](https://github.com/nifeos/non_volatile_memory_express#license)
-[![minimum Rust version](https://img.shields.io/badge/rust-1.88%2B-blue.svg)](https://github.com/nifeos/non_volatile_memory_express/blob/main/Cargo.toml)
+[![minimum Rust version](https://img.shields.io/badge/rust-1.85%2B-blue.svg)](https://github.com/nifeos/non_volatile_memory_express/blob/main/Cargo.toml)
 
 The queue mechanics of an `NVMe` (Non-Volatile Memory Express) driver, as pure logic. It covers
 register field decode, command building, submission and completion ring arithmetic with the phase
@@ -33,16 +33,21 @@ let mut completion_queue = CompletionQueue::new(64);
 // Read eight 512-byte blocks from LBA 0 of namespace 1 into a buffer that straddles a page.
 let pages = physical_region_page_pair(0x4000_0800, 4096, 4096).expect("two pages suffice");
 let read = Command::read(1, 1, 0, 8, pages);
-// Write `read.0` into submission slot `slot`, then ring the tail:
+// Write `read.0` into submission slot `slot`, issue a write barrier, then ring the tail:
 let slot = submission_queue.push().expect("the ring has room");
 assert_eq!(doorbell(1, Doorbell::SubmissionTail, 0), 0x1008); // write the tail here
 assert_eq!((slot, submission_queue.tail()), (0, 1));
 assert_eq!(read.0[1], 1);
 
-// Poll completion slot `completion_queue.head()` until the controller's entry carries the
-// expected phase.
-let done = Completion::from_dwords([0, 1 | (1 << 16), 0, 1 | (1 << 16)]);
-assert!(completion_queue.is_owned(&done) && done.command_id == 1 && done.status == 0);
+// Poll dword 3 of completion slot `completion_queue.head()` until its phase bit (bit 16) carries
+// the expected phase, issue a read barrier, then read dwords 0 to 2. Here the controller reports
+// submission queue head 1 (it consumed the command in slot 0) for submission queue 1, and echoes
+// command identifier 1 with status 0.
+let done = Completion::from_dwords([0, 0, 1 | (1 << 16), 1 | (1 << 16)]);
+assert!(completion_queue.is_owned(&done)); // the phase tag only
+// Ownership says the entry is fresh, not that it answers a command this driver issued: match the
+// identifiers against the commands in flight.
+assert!(done.submission_queue_id == 1 && done.command_id == 1 && done.status == 0);
 // The head comes from the controller, so it is checked: an impossible one is an error to handle
 // (here, by giving up), never a panic.
 submission_queue
@@ -54,7 +59,7 @@ assert_eq!(completion_queue.pop(), 1);
 
 ## What is proven
 
-To build and test, install Rust 1.88 or newer (for example with `rustup`), then run `cargo build`
+To build and test, install Rust 1.85 or newer (for example with `rustup`), then run `cargo build`
 and `cargo test` from the crate's directory. The test run also compiles the example above as a
 documentation test.
 
@@ -102,10 +107,31 @@ message as a placeholder), or an additional overflow check alongside the named a
 Undo the patch with `patch -R -p1 < <the same patch>`. The failure shows that the proof checks
 something.
 
+## Memory ordering
+
+The crate performs no memory access, so the caller owns the ordering both rings need, and on a
+weakly ordered host (Arm, RISC-V) it needs barriers. On the submission side, issue a write barrier
+between the stores of the 64-byte entry and the write of the tail doorbell, or the controller may
+fetch a stale entry. On the completion side, read dword 3 of the entry first and test its phase bit
+(bit 16) against the phase `CompletionQueue::is_owned` expects. Once it matches, issue a read
+barrier, then read dwords 0 to 2, and decode all four with `Completion::from_dwords`. Reading all
+four dwords before the phase test lets the loads of dwords 0 to 2 run ahead of the controller's
+write while dword 3 follows it, and the fresh phase then carries a stale head and command
+identifier.
+
 ## BUGS
 
 - `SubmissionQueue` models one ring and keeps no count of commands in flight. `push` returns
   `None` when the ring is full. The caller decides whether that is a bug or a reason to wait.
+- `CompletionQueue::is_owned` tests the phase tag and nothing else. A controller that writes an
+  entry with a fresh phase and a command identifier nobody issued passes it, so the caller matches
+  `command_id` and `submission_queue_id` against the commands it has in flight.
+- The queue builders `Command::create_io_completion_queue` and
+  `Command::create_io_submission_queue` panic on fewer than two entries, and
+  `physical_region_page_pair` panics on a page size that is not a power of two of at least 512
+  bytes. These are caller mistakes, and no value the controller writes reaches either panic. The
+  caller checks the queue depth against `Capabilities::maximum_queue_entries` and keeps queue
+  identifier 0, the admin pair, out of the I/O queue builders.
 - `physical_region_page_pair` covers at most two pages. A transfer that needs a PRP list returns
   `None`.
 - `parse_identify_namespace` refuses LBA formats outside 512 bytes to 4 KiB per block.
@@ -117,16 +143,40 @@ something.
   a 4096-byte unit and for a unit of any size. `completion` decodes completion queue entries,
   drives a completion ring with them and records each entry's submission queue head.
   `capabilities` decodes the `CAP` register and derives doorbell offsets and page pointers from it.
-  Run one with `cargo +nightly fuzz run <target>`; the weekly fuzz job runs all three for a bounded
-  time.
+  Install the runner once with `cargo install cargo-fuzz`, then run one target with
+  `cargo +nightly fuzz run <target>`; the weekly fuzz job runs all three for a bounded time.
 
 The public structs that a later release may widen (`Completion`, `IdentifyNamespace` and
 `Namespace`) are `#[non_exhaustive]`. Build a `Namespace` with `Namespace::new`, and read the other
 two from the controller's answer.
 
-The minimum supported Rust version is 1.88.
+## How it differs from Linux and the Rust drivers
+
+The Linux driver (`drivers/nvme/host`) owns the whole data path: a tag set per queue, PRP lists and
+scatter-gather lists, many queue pairs, interrupts, reset, timeouts, shutdown and the admin command
+set. The polled user-space driver of the Storage Performance Development Kit (SPDK) does the same
+outside the kernel. Rust driver crates such as `nvme-driver` own their direct memory access and
+issue the commands themselves, and Redox `nvmed` is a driver service of its own. This crate is none
+of those. It builds one command at a time and walks one ring pair, as pure logic with no I/O, no
+allocator, no `unsafe` and no dependency, so it compiles for any target and the model checker
+reaches all of it. It checks what the controller hands back instead of trusting it: a submission
+queue head the controller cannot have reached is an error, not a recorded value.
+
+What that costs you: you write the volatile register accessors, the direct memory access
+allocation, the admin bring-up sequence, the command identifier tracking and every wait. A transfer
+longer than two pages has no PRP list to carry it.
+
+## Minimum Rust version
+
+Rust 1.85, the `rust-version` in `Cargo.toml`. To check it, run
+`rustup toolchain install 1.85 --profile minimal`, then `cargo +1.85 test`. For the bare-metal
+build, add the target with `rustup target add --toolchain 1.85 aarch64-unknown-none-softfloat` and
+run `cargo +1.85 build --target aarch64-unknown-none-softfloat`.
 
 ## License
 
-Licensed under either of MIT ([LICENSE-MIT](LICENSE-MIT)) or Apache-2.0
-([LICENSE-APACHE](LICENSE-APACHE)), at your option.
+Licensed under either of MIT
+([LICENSE-MIT](https://github.com/nifeos/non_volatile_memory_express/blob/main/LICENSE-MIT)) or
+Apache-2.0
+([LICENSE-APACHE](https://github.com/nifeos/non_volatile_memory_express/blob/main/LICENSE-APACHE)),
+at your option.

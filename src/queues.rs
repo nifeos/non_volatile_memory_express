@@ -18,8 +18,15 @@ pub struct SubmissionQueue {
 impl SubmissionQueue {
     /// A fresh ring of `entries` slots (at least 2: a one-slot ring cannot distinguish full from
     /// empty in tail/head form, and the specification's minimum queue size is 2).
+    ///
+    /// # Panics
+    ///
+    /// On `entries` below 2.
     pub fn new(entries: u16) -> Self {
-        assert!(entries >= 2);
+        assert!(
+            entries >= 2,
+            "a submission queue holds at least two entries"
+        );
         SubmissionQueue {
             entries,
             tail: 0,
@@ -31,6 +38,10 @@ impl SubmissionQueue {
     /// caller then rings [`crate::doorbell`] with [`SubmissionQueue::tail`]. Returns `None`, and
     /// changes nothing, when the ring is full: the controller has not yet consumed enough
     /// commands, and the caller decides whether that is a bug or a reason to wait.
+    ///
+    /// The caller issues a write barrier between the stores of the entry in the slot and the write
+    /// of the tail doorbell, so that a weakly ordered host never lets the controller fetch the
+    /// entry before its contents arrive.
     pub fn push(&mut self) -> Option<u16> {
         let next = (self.tail + 1) % self.entries;
         if next == self.head {
@@ -118,7 +129,8 @@ impl core::error::Error for ImpossibleHeadError {}
 
 /// A completion ring's driver-side state: where the next completion will appear and which phase
 /// value marks it as fresh. The phase starts true (the ring starts zeroed, so the controller's
-/// first lap writes 1s) and flips every time the head wraps.
+/// first lap writes 1s) and flips every time the head wraps. A ring holds at least two entries,
+/// the specification's minimum queue size, and [`CompletionQueue::new`] refuses fewer.
 ///
 /// # Examples
 ///
@@ -158,8 +170,15 @@ pub struct CompletionQueue {
 
 impl CompletionQueue {
     /// A fresh ring of `entries` slots, phase starting true (see the struct docs).
+    ///
+    /// # Panics
+    ///
+    /// On `entries` below 2.
     pub fn new(entries: u16) -> Self {
-        assert!(entries >= 2);
+        assert!(
+            entries >= 2,
+            "a completion queue holds at least two entries"
+        );
         CompletionQueue {
             entries,
             head: 0,
@@ -174,6 +193,16 @@ impl CompletionQueue {
 
     /// Does this completion belong to the driver yet? True when its phase tag matches the phase
     /// this lap expects; a stale entry (last lap's, or the initial zeros) fails the match.
+    ///
+    /// Ownership is the phase tag and nothing else. An entry with a fresh phase and a command
+    /// identifier the driver never issued passes, so the caller matches
+    /// [`Completion::command_id`] and [`Completion::submission_queue_id`] against its commands in
+    /// flight.
+    ///
+    /// On a weakly ordered host, the caller reads dword 3 of the slot first and tests its phase
+    /// bit (bit 16). Only after it matches does the caller issue a read barrier and read dwords 0
+    /// to 2; reading all four before the test can pair a fresh phase with a stale head and command
+    /// identifier.
     pub fn is_owned(&self, completion: &Completion) -> bool {
         completion.phase == self.phase
     }
