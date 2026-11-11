@@ -118,9 +118,9 @@ module:
   identifier, the phase tag and the 15-bit status field rebuild dword 3 exactly, so the decode
   loses no bit, doubles none and reads none from the wrong place.
 - `completion_status_parts_rebuild_the_status_field`: for any dword 3, the status code, the code
-  type, the retry delay, More and Do Not Retry each lie in the range their width allows and
-  together rebuild the 15-bit status field; success is exactly an all-zero field, and the phase
-  read from dword 3 alone equals the decoded phase tag.
+  type, the retry delay, More and Do Not Retry each lie in the range their width allows. Together
+  they rebuild the 15-bit status field. Success is exactly an all-zero field, and the phase read
+  from dword 3 alone equals the decoded phase tag.
 - `record_head_accepts_only_a_head_the_controller_can_have_reached`: for any ring state and any
   head a controller reports, `SubmissionQueue::record_head` records the head only when it lies from
   the recorded head forward, round the ring, to the tail. Any other head returns
@@ -166,9 +166,9 @@ identifier.
   `None`.
 - `parse_identify_namespace` refuses LBA formats outside 512 bytes to 4 KiB per block.
   `logical_block_size_shift` reports the shift it refused.
-- Not proven: the meaning of a status code within its code type (the proofs place each part of
-  the status field at its bits, and the crate names only the generic code type and two of its
-  codes), and anything in time, which belongs to the caller.
+- Not proven: the meaning of a status code within its code type, and anything in time, which
+  belongs to the caller. The proofs place each part of the status field at its bits, and the crate
+  names only the generic code type and two of its codes.
 - Three cargo-fuzz targets in `fuzz/` feed the decoders arbitrary controller bytes.
   `identify_namespace` reads the Identify namespace structure and builds a transfer from it, for
   a 4096-byte unit and for a unit of any size. `completion` decodes completion queue entries,
