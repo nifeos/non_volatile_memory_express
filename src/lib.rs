@@ -21,7 +21,10 @@ pub use command::{
     CONTROLLER_OR_NAMESPACE_STRUCTURE_CONTROLLER, CONTROLLER_OR_NAMESPACE_STRUCTURE_NAMESPACE,
     Command, NON_VOLATILE_MEMORY_FLUSH, NON_VOLATILE_MEMORY_READ, NON_VOLATILE_MEMORY_WRITE,
 };
-pub use completion::Completion;
+pub use completion::{
+    Completion, GENERIC_STATUS_INVALID_FIELD_IN_COMMAND, GENERIC_STATUS_SUCCESSFUL_COMPLETION,
+    STATUS_CODE_TYPE_GENERIC,
+};
 pub use configuration::{
     admin_queue_attributes, enabled_controller_configuration, shutdown_controller_configuration,
 };

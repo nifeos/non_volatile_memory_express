@@ -1,0 +1,21 @@
+Falsifies `non_volatile_memory_express::verification::completion_status_parts_rebuild_the_status_field`.
+
+The defect: `Completion::status_code_type` shifts the status field by 9 instead of 8, so it reads
+bits 9 to 11. The generic code type of an ordinary failure still decodes as 0 when bits 8 to 11
+are clear, but a command-specific failure (code type 1) reads as generic, and a set retry delay
+bit leaks into the code type, so a driver matches the code against the wrong table.
+
+Expected to fail: the harness's `assert_eq!(rebuilt, completion.status)`.
+
+diff --git a/src/completion.rs b/src/completion.rs
+--- a/src/completion.rs
++++ b/src/completion.rs
+@@ -79,7 +79,7 @@
+     /// 7; 0 is [`STATUS_CODE_TYPE_GENERIC`].
+     #[doc(alias = "SCT")]
+     pub fn status_code_type(&self) -> u8 {
+-        (self.status >> 8) as u8 & 0x7
++        (self.status >> 9) as u8 & 0x7
+     }
+ 
+     /// The Command Retry Delay selector (`CRD`, status field bits 11 to 12, dword 3 bits 28 to
