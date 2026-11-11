@@ -11,7 +11,7 @@ diff --git a/src/completion.rs b/src/completion.rs
 @@ -48,7 +48,7 @@
              submission_queue_id: (dwords[2] >> 16) as u16,
              command_id: dwords[3] as u16,
-             phase: Self::phase_of(dwords[3]),
+             phase: Self::is_phase_tag_set(dwords[3]),
 -            status: (dwords[3] >> 17) as u16,
 +            status: (dwords[3] >> 16) as u16,
          }
