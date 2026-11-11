@@ -47,11 +47,13 @@ assert_eq!(read.0[1], 1);
 // the expected phase, issue a read barrier, then read dwords 0 to 2. Here the controller reports
 // submission queue head 1 (it consumed the command in slot 0) for submission queue 1, and echoes
 // command identifier 1 with status 0.
-let done = Completion::from_dwords([0, 0, 1 | (1 << 16), 1 | (1 << 16)]);
+let dword_three = 1 | (1 << 16);
+assert_eq!(Completion::is_phase_tag_set(dword_three), completion_queue.expects_phase_tag_set());
+let done = Completion::from_dwords([0, 0, 1 | (1 << 16), dword_three]);
 assert!(completion_queue.is_owned(&done)); // the phase tag only
 // Ownership says the entry is fresh, not that it answers a command this driver issued: match the
 // identifiers against the commands in flight.
-assert!(done.submission_queue_id == 1 && done.command_id == 1 && done.status == 0);
+assert!(done.submission_queue_id == 1 && done.command_id == 1 && done.is_success());
 // The head comes from the controller, so it is checked: an impossible one is an error to handle
 // (here, by giving up), never a panic.
 submission_queue
@@ -71,8 +73,8 @@ To run the proofs, install Kani as its
 [installation guide](https://model-checking.github.io/kani/install-guide.html) says:
 `cargo install --locked kani-verifier --version 0.68.0`, then `cargo kani setup` once (it
 downloads a pinned nightly toolchain). Run `cargo kani` from the crate's directory. The harnesses
-pass on Kani 0.68.0; all fourteen take about 30 seconds in total on a laptop-class machine, after
-the setup. To run one, add `--harness <name>`. Fourteen harnesses live in the `verification`
+pass on Kani 0.68.0; all fifteen take about 30 seconds in total on a laptop-class machine, after
+the setup. To run one, add `--harness <name>`. Fifteen harnesses live in the `verification`
 module:
 
 - `submission_push_stays_in_bounds`: a push onto any ring returns a slot inside the ring and leaves
@@ -110,6 +112,10 @@ module:
 - `completion_decode_is_total_and_rebuilds_dword_three`: for any four dwords, the command
   identifier, the phase tag and the 15-bit status field rebuild dword 3 exactly, so the decode
   loses no bit, doubles none and reads none from the wrong place.
+- `completion_status_parts_rebuild_the_status_field`: for any dword 3, the status code, the code
+  type, the retry delay, More and Do Not Retry each lie in the range their width allows. Together
+  they rebuild the 15-bit status field. Success is exactly an all-zero field, and the phase read
+  from dword 3 alone equals the decoded phase tag.
 - `record_head_accepts_only_a_head_the_controller_can_have_reached`: for any ring state and any
   head a controller reports, `SubmissionQueue::record_head` records the head only when it lies from
   the recorded head forward, round the ring, to the tail. Any other head returns
@@ -155,8 +161,9 @@ identifier.
   `None`.
 - `parse_identify_namespace` refuses LBA formats outside 512 bytes to 4 KiB per block.
   `logical_block_size_shift` reports the shift it refused.
-- Not proven: the meaning of the status code and status code type inside a completion's status
-  field, and anything in time, which belongs to the caller.
+- Not proven: the meaning of a status code within its code type, and anything in time, which
+  belongs to the caller. The proofs place each part of the status field at its bits, and the crate
+  names only the generic code type and two of its codes.
 - Three cargo-fuzz targets in `fuzz/` feed the decoders arbitrary controller bytes.
   `identify_namespace` reads the Identify namespace structure and builds a transfer from it, for
   a 4096-byte unit and for a unit of any size. `completion` decodes completion queue entries,

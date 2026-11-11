@@ -324,6 +324,30 @@ fn completion_decode_is_total_and_rebuilds_dword_three() {
     );
 }
 
+/// Falsification: replayable `falsifications/verification.completion_status_parts_rebuild_the_status_field.patch`
+/// **Each part of a completion's status reads its own bits and no others**, for any dword 3 a
+/// controller may write. The status code (8 bits), the code type (3), the retry delay (2), More
+/// and Do Not Retry lie in the ranges their widths allow and, shifted back to their places,
+/// rebuild the 15-bit field exactly, so no part reads a neighbor's bit. Success is exactly an
+/// all-zero field, and the phase tag read from dword 3 alone, before the rest of the entry, is the
+/// one the full decode gives.
+#[kani::proof]
+fn completion_status_parts_rebuild_the_status_field() {
+    let dword_three: u32 = kani::any();
+    let completion = Completion::from_dwords([0, 0, 0, dword_three]);
+
+    assert!(completion.status_code_type() < 1 << 3);
+    assert!(completion.command_retry_delay() < 1 << 2);
+    let rebuilt = u16::from(completion.status_code())
+        | u16::from(completion.status_code_type()) << 8
+        | u16::from(completion.command_retry_delay()) << 11
+        | u16::from(completion.is_more_set()) << 13
+        | u16::from(completion.is_do_not_retry_set()) << 14;
+    assert_eq!(rebuilt, completion.status);
+    assert_eq!(completion.is_success(), dword_three >> 17 == 0);
+    assert_eq!(Completion::is_phase_tag_set(dword_three), completion.phase);
+}
+
 /// Falsification: replayable `falsifications/verification.record_head_accepts_only_a_head_the_controller_can_have_reached.patch`
 /// **No head a controller reports can panic the submission ring or corrupt it.** For any ring
 /// state and any reported head, `record_head` accepts exactly the heads that lie from the recorded

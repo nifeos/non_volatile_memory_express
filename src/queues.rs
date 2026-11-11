@@ -149,7 +149,7 @@ impl core::error::Error for ImpossibleHeadError {}
 /// let fresh = Completion::from_dwords([0, 0, 0, 7 | (1 << 16)]);
 /// assert!(queue.is_owned(&fresh));
 /// assert_eq!(fresh.command_id, 7);
-/// assert_eq!(fresh.status, 0); // 0 is success
+/// assert!(fresh.is_success());
 /// assert_eq!(queue.pop(), 1); // the value the driver writes to the completion head doorbell
 ///
 /// // Slot 1, same lap, still phase 1.
@@ -191,6 +191,13 @@ impl CompletionQueue {
         self.head
     }
 
+    /// True when a fresh entry on this lap carries its phase tag set: true on the first lap,
+    /// flipped at every wrap. Compare it with [`Completion::is_phase_tag_set`] on dword 3 before
+    /// reading the rest of the entry.
+    pub fn expects_phase_tag_set(&self) -> bool {
+        self.phase
+    }
+
     /// Does this completion belong to the driver yet? True when its phase tag matches the phase
     /// this lap expects; a stale entry (last lap's, or the initial zeros) fails the match.
     ///
@@ -200,9 +207,9 @@ impl CompletionQueue {
     /// flight.
     ///
     /// On a weakly ordered host, the caller reads dword 3 of the slot first and tests its phase
-    /// bit (bit 16). Only after it matches does the caller issue a read barrier and read dwords 0
-    /// to 2; reading all four before the test can pair a fresh phase with a stale head and command
-    /// identifier.
+    /// bit (bit 16), with [`Completion::is_phase_tag_set`] against
+    /// [`CompletionQueue::expects_phase_tag_set`]. Only after it matches does the caller issue a read barrier and read dwords 0 to 2; reading
+    /// all four before the test can pair a fresh phase with a stale head and command identifier.
     pub fn is_owned(&self, completion: &Completion) -> bool {
         completion.phase == self.phase
     }
@@ -238,6 +245,22 @@ mod tests {
             }
         }
         assert_eq!(flips, 3, "nine pops of a 3-ring wrap exactly three times");
+    }
+
+    #[test]
+    fn the_expected_phase_starts_true_and_agrees_with_is_owned_on_every_lap() {
+        let mut queue = CompletionQueue::new(2);
+        for lap in 0..4 {
+            assert_eq!(queue.expects_phase_tag_set(), lap % 2 == 0, "lap {lap}");
+            for dword_three in [0, 1 << 16] {
+                assert_eq!(
+                    Completion::is_phase_tag_set(dword_three) == queue.expects_phase_tag_set(),
+                    queue.is_owned(&Completion::from_dwords([0, 0, 0, dword_three]))
+                );
+            }
+            queue.pop();
+            queue.pop();
+        }
     }
 
     #[test]
