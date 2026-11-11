@@ -7,7 +7,8 @@
 
 The queue mechanics of an `NVMe` (Non-Volatile Memory Express) driver, as pure logic. It covers
 register field decode, command building, submission and completion ring arithmetic with the phase
-tag, doorbell addressing, Physical Region Page (PRP) construction and Identify namespace parsing.
+tag, doorbell addressing, Physical Region Page (PRP) construction and Identify namespace and
+controller parsing.
 It follows revision 1.4 of the `NVMe` base specification. Every section number in this crate's
 documentation is that revision's. The crate is `no_std`, needs no allocator and performs no I/O.
 You supply the volatile memory-mapped input/output (MMIO) accessors, the direct memory access (DMA)
@@ -73,8 +74,8 @@ To run the proofs, install Kani as its
 [installation guide](https://model-checking.github.io/kani/install-guide.html) says:
 `cargo install --locked kani-verifier --version 0.68.0`, then `cargo kani setup` once (it
 downloads a pinned nightly toolchain). Run `cargo kani` from the crate's directory. The harnesses
-pass on Kani 0.68.0; all fifteen take about 30 seconds in total on a laptop-class machine, after
-the setup. To run one, add `--harness <name>`. Fifteen harnesses live in the `verification`
+pass on Kani 0.68.0; all sixteen take about 30 seconds in total on a laptop-class machine, after
+the setup. To run one, add `--harness <name>`. Sixteen harnesses live in the `verification`
 module:
 
 - `submission_push_stays_in_bounds`: a push onto any ring returns a slot inside the ring and leaves
@@ -96,6 +97,10 @@ module:
 - `identify_parse_is_total_and_bounds_the_shift`: no controller response panics the Identify
   namespace parse, and every accepted LBA shift lies between 9 and 12, so a 4 KiB transfer covers
   1 to 8 logical blocks.
+- `identify_controller_parse_is_total_and_reads_its_bytes`: no controller response panics the
+  Identify Controller parse. Every answer of 520 bytes or more is accepted, with the transfer limit
+  read from byte 77 and the namespace count from bytes 516 to 519. The limit in bytes is the
+  minimum page shifted by that shift, or `u64::MAX` when there is none or it does not fit.
 - `capabilities_decode_is_total_and_reads_the_specified_bits`: for any value of the capabilities
   register, every `Capabilities` field lies in the range its width allows and equals the bits at
   its place in the register.
@@ -172,10 +177,10 @@ identifier.
   Install the runner once with `cargo install cargo-fuzz`, then run one target with
   `cargo +nightly fuzz run <target>`; the weekly fuzz job runs all three for a bounded time.
 
-The public structs that a later release may widen (`Completion`, `IdentifyNamespace` and
-`Namespace`) are `#[non_exhaustive]`. Build a `Namespace` from the Identify answer with
-`Namespace::from_identify`, or with `Namespace::new` when there is no answer to read, and read the
-other two from the controller's answer. Before Identify has answered, a driver holds
+The public structs that a later release may widen (`Completion`, `IdentifyController`,
+`IdentifyNamespace` and `Namespace`) are `#[non_exhaustive]`. Build a `Namespace` from the Identify
+answer with `Namespace::from_identify`, or with `Namespace::new` when there is no answer to read,
+and read the other three from the controller's answers. Before Identify has answered, a driver holds
 `Option<IdentifyNamespace>`; no placeholder value of the type stands for a namespace nobody has
 read.
 

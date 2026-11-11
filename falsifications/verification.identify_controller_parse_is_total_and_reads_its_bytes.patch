@@ -1,0 +1,21 @@
+Falsifies `non_volatile_memory_express::verification::identify_controller_parse_is_total_and_reads_its_bytes`.
+
+The defect: `parse_identify_controller` reads the transfer limit from byte 76, the controller's
+multi-path capabilities, instead of byte 77. A controller that reports neither still parses as
+unlimited, but one with a limit has it replaced by an unrelated bit field, so a driver may send a
+transfer longer than the controller accepts, or split ones it would take whole.
+
+Expected to fail: the harness's `assert_eq!(controller.maximum_data_transfer_size_shift, data[77])`.
+
+diff --git a/src/identify.rs b/src/identify.rs
+--- a/src/identify.rs
++++ b/src/identify.rs
+@@ -111,7 +111,7 @@
+ pub fn parse_identify_controller(data: &[u8]) -> Option<IdentifyController> {
+     let number_of_namespaces = data.get(516..520)?;
+     Some(IdentifyController {
+-        maximum_data_transfer_size_shift: data[77],
++        maximum_data_transfer_size_shift: data[76],
+         maximum_namespace_id: u32::from_le_bytes(number_of_namespaces.try_into().ok()?),
+     })
+ }

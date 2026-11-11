@@ -1,5 +1,5 @@
-//! **Identify namespace parsing**: the two facts a block driver needs from the controller's
-//! answer, read defensively.
+//! **Identify parsing**: the facts a block driver needs from the controller's answers about a
+//! namespace and about itself, read defensively.
 
 /// The two facts the driver needs from the 4096-byte Identify namespace structure (section 5.15.2,
 /// figure 245): the namespace size in logical blocks (Namespace Size (`NSZE`), bytes 0..8) and the
@@ -88,6 +88,67 @@ impl IdentifyNamespace {
             return None;
         }
         u16::try_from(unit_bytes >> self.logical_block_size_shift).ok()
+    }
+}
+
+/// The two facts a driver needs from the 4096-byte Identify Controller structure (the one
+/// [`crate::CONTROLLER_OR_NAMESPACE_STRUCTURE_CONTROLLER`] selects): the Maximum Data Transfer Size (`MDTS`, byte 77) and the Number of Namespaces (`NN`, bytes 516
+/// to 519). `None` only if the structure is shorter than the 520 bytes that reach the last of
+/// them; every value the controller may write in them is accepted, since each has a meaning.
+///
+/// # Examples
+///
+/// ```
+/// use non_volatile_memory_express::parse_identify_controller;
+///
+/// let mut structure = [0u8; 4096];
+/// structure[77] = 5; // MDTS: 2^5 minimum pages per transfer
+/// structure[516..520].copy_from_slice(&4u32.to_le_bytes()); // NN: namespaces 1 to 4
+/// let controller = parse_identify_controller(&structure).unwrap();
+/// assert_eq!(controller.maximum_data_transfer_bytes(4096), 128 * 1024);
+/// assert_eq!(controller.maximum_namespace_id, 4);
+/// ```
+pub fn parse_identify_controller(data: &[u8]) -> Option<IdentifyController> {
+    let number_of_namespaces = data.get(516..520)?;
+    Some(IdentifyController {
+        maximum_data_transfer_size_shift: data[77],
+        maximum_namespace_id: u32::from_le_bytes(number_of_namespaces.try_into().ok()?),
+    })
+}
+
+/// See [`parse_identify_controller`]. The struct is `#[non_exhaustive]`: a later release may read
+/// more of the structure, so code outside the crate gets one only from the parse.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct IdentifyController {
+    /// The Maximum Data Transfer Size (`MDTS`) as the controller wrote it: a transfer may span at
+    /// most `2^maximum_data_transfer_size_shift` pages of the controller's minimum page size,
+    /// and 0 means the controller states no limit. Read it in bytes with
+    /// [`IdentifyController::maximum_data_transfer_bytes`].
+    #[doc(alias = "MDTS")]
+    pub maximum_data_transfer_size_shift: u8,
+    /// The Number of Namespaces (`NN`): the largest namespace identifier valid on this controller.
+    /// Not every identifier from 1 to it need be active; the
+    /// [`crate::CONTROLLER_OR_NAMESPACE_STRUCTURE_ACTIVE_NAMESPACE_LIST`] selector lists the ones
+    /// that are.
+    #[doc(alias = "NN")]
+    pub maximum_namespace_id: u32,
+}
+
+impl IdentifyController {
+    /// The largest transfer one command may carry, in bytes, given the controller's minimum page
+    /// size ([`crate::Capabilities::minimum_page_size_bytes`]). `u64::MAX` when the controller
+    /// states no limit, and also when the limit is too large for a `u64`, since no transfer can
+    /// reach it either way. A driver keeps every transfer at or below it, whatever the page pair
+    /// or list could otherwise describe.
+    #[doc(alias = "MDTS")]
+    pub fn maximum_data_transfer_bytes(&self, minimum_page_size_bytes: u64) -> u64 {
+        match self.maximum_data_transfer_size_shift {
+            0 => u64::MAX,
+            exponent => 1u64.checked_shl(exponent.into()).map_or(u64::MAX, |pages| {
+                pages.saturating_mul(minimum_page_size_bytes)
+            }),
+        }
     }
 }
 
@@ -236,5 +297,41 @@ mod tests {
             );
             assert_eq!(id.blocks_per_transfer(!(block - 1)), None);
         }
+    }
+
+    #[test]
+    fn identify_controller_reads_the_transfer_limit_and_the_namespace_count() {
+        let mut data = [0u8; 4096];
+        data[76] = 0xff; // the byte before MDTS, which must not leak into it
+        data[77] = 3;
+        data[78] = 0xff; // and the byte after
+        data[515] = 0xff;
+        data[516..520].copy_from_slice(&0x0102_0304u32.to_le_bytes());
+        data[520] = 0xff;
+        let controller = parse_identify_controller(&data).unwrap();
+        assert_eq!(controller.maximum_data_transfer_size_shift, 3);
+        assert_eq!(controller.maximum_namespace_id, 0x0102_0304);
+        assert_eq!(parse_identify_controller(&data[..520]), Some(controller));
+        assert_eq!(parse_identify_controller(&data[..519]), None, "truncated");
+        assert_eq!(parse_identify_controller(&[]), None);
+    }
+
+    /// `MDTS` counts minimum pages as a power of two; 0 states no limit, and a limit beyond a
+    /// `u64` is no limit either.
+    #[test]
+    fn the_transfer_limit_is_a_power_of_two_of_minimum_pages_and_0_is_unlimited() {
+        let controller = |exponent| IdentifyController {
+            maximum_data_transfer_size_shift: exponent,
+            maximum_namespace_id: 1,
+        };
+        assert_eq!(controller(0).maximum_data_transfer_bytes(4096), u64::MAX);
+        assert_eq!(controller(1).maximum_data_transfer_bytes(4096), 8192);
+        assert_eq!(controller(5).maximum_data_transfer_bytes(4096), 131_072);
+        assert_eq!(controller(5).maximum_data_transfer_bytes(16384), 524_288);
+        assert_eq!(controller(51).maximum_data_transfer_bytes(4096), 1 << 63);
+        assert_eq!(controller(52).maximum_data_transfer_bytes(4096), u64::MAX);
+        assert_eq!(controller(63).maximum_data_transfer_bytes(1), 1 << 63);
+        assert_eq!(controller(64).maximum_data_transfer_bytes(1), u64::MAX);
+        assert_eq!(controller(255).maximum_data_transfer_bytes(4096), u64::MAX);
     }
 }
