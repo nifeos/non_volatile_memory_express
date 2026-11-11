@@ -9,7 +9,7 @@ repository = "https://github.com/nifeos/non_volatile_memory_express"
 readme = "README.md"
 keywords = ["no-std", "kani", "driver"]
 categories = ["no-std", "embedded", "hardware-support"]
-publish = false     # the default; the allowlist lint holds the exception (crates/publish-allowlist.txt)
+publish = false     # held until the maintainers decide the first release
 
 # no_std for an operating system kernel, std for host tests. The crate owns the NVMe queue
 # mechanics only (register field decode, command building, submission and completion ring
