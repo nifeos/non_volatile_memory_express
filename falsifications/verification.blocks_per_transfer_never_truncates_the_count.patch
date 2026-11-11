@@ -7,15 +7,14 @@ instead of refusing a count that does not fit. A unit of 65536 logical blocks th
 Expected to fail: the harness's `assert!(blocks >= 1)`.
 
 diff --git a/src/identify.rs b/src/identify.rs
-index 0f8805c..b9cfae7 100644
 --- a/src/identify.rs
 +++ b/src/identify.rs
-@@ -91,7 +91,7 @@ impl IdentifyNamespace {
-         if unit == 0 || unit & ((1 << self.logical_block_size_shift) - 1) != 0 {
+@@ -87,7 +87,7 @@
+         if unit_bytes == 0 || unit_bytes & ((1 << self.logical_block_size_shift) - 1) != 0 {
              return None;
          }
--        u16::try_from(unit >> self.logical_block_size_shift).ok()
-+        Some((unit >> self.logical_block_size_shift) as u16)
+-        u16::try_from(unit_bytes >> self.logical_block_size_shift).ok()
++        Some((unit_bytes >> self.logical_block_size_shift) as u16)
      }
  }
  

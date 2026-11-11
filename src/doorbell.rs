@@ -34,9 +34,9 @@ pub enum Doorbell {
 /// assert_eq!(doorbell(1, Doorbell::SubmissionTail, 0), 0x1008);
 /// assert_eq!(doorbell(1, Doorbell::CompletionHead, 0), 0x100c);
 /// ```
-pub fn doorbell(queue_id: u16, which: Doorbell, doorbell_stride: u32) -> u64 {
+pub fn doorbell(queue_id: u16, role: Doorbell, doorbell_stride: u32) -> u64 {
     let index = 2 * queue_id as u64
-        + match which {
+        + match role {
             Doorbell::SubmissionTail => 0,
             Doorbell::CompletionHead => 1,
         };

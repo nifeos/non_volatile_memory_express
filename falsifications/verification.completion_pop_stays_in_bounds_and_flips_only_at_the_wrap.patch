@@ -1,4 +1,4 @@
-Falsifies `non_volatile_memory_express::verification::cq_pop_stays_in_bounds_and_flips_only_at_the_wrap`.
+Falsifies `non_volatile_memory_express::verification::completion_pop_stays_in_bounds_and_flips_only_at_the_wrap`.
 
 The defect: `CompletionQueue::pop` wraps the head but forgets to flip the expected phase, so every lap after
 the first reads stale entries as fresh.

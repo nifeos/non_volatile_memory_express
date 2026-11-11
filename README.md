@@ -67,13 +67,14 @@ To run the proofs, install Kani as its
 [installation guide](https://model-checking.github.io/kani/install-guide.html) says:
 `cargo install --locked kani-verifier --version 0.68.0`, then `cargo kani setup` once (it
 downloads a pinned nightly toolchain). Run `cargo kani` from the crate's directory. The harnesses
-pass on Kani 0.68.0; all ten take about 30 seconds in total on a laptop-class machine, after
-the setup. To run one, add `--harness <name>`. Ten harnesses live in the `verification` module:
+pass on Kani 0.68.0; all eleven take about 30 seconds in total on a laptop-class machine, after
+the setup. To run one, add `--harness <name>`. Eleven harnesses live in the `verification` module:
 
-- `sq_push_stays_in_bounds`: a push onto any ring returns a slot inside the ring and leaves a legal
-  tail, or returns `None` and changes nothing, and it returns `None` exactly when the ring is full.
-- `cq_pop_stays_in_bounds_and_flips_only_at_the_wrap`: a completion pop keeps the head inside the
-  ring, and the expected phase flips exactly once per lap.
+- `submission_push_stays_in_bounds`: a push onto any ring returns a slot inside the ring and leaves
+  a legal tail, or returns `None` and changes nothing, and it returns `None` exactly when the ring
+  is full.
+- `completion_pop_stays_in_bounds_and_flips_only_at_the_wrap`: a completion pop keeps the head
+  inside the ring, and the expected phase flips exactly once per lap.
 - `distinct_doorbells_never_collide`: two different (queue, role) pairs never share a doorbell
   offset, for every stride a controller may report.
 - `physical_region_page_pair_is_total_and_page_disciplined`: for any base, length and page size,
@@ -82,6 +83,9 @@ the setup. To run one, add `--harness <name>`. Ten harnesses live in the `verifi
 - `a_transfer_command_is_only_built_for_a_block_the_namespace_has`: `Namespace::transfer_command`
   builds a command only for a block whose last byte lies inside the namespace, and never overflows
   computing its LBA, for any block number, buffer address and namespace size.
+- `a_transfer_command_addresses_only_logical_blocks_the_namespace_has`: the starting logical block
+  and the count an accepted transfer command carries end inside the namespace, for a 4096-byte
+  unit over 512-byte to 4096-byte logical blocks, so the unit and the count cannot disagree.
 - `identify_parse_is_total_and_bounds_the_shift`: no controller response panics the Identify
   namespace parse, and every accepted LBA shift lies between 9 and 12, so a 4 KiB transfer covers
   1 to 8 logical blocks.
@@ -135,7 +139,7 @@ identifier.
 - `physical_region_page_pair` covers at most two pages. A transfer that needs a PRP list returns
   `None`.
 - `parse_identify_namespace` refuses LBA formats outside 512 bytes to 4 KiB per block.
-  `logical_block_format_size_shift` reports the shift it refused.
+  `logical_block_size_shift` reports the shift it refused.
 - Not proven: the meaning of the status code and status code type inside a completion's status
   field, and anything in time, which belongs to the caller.
 - Three cargo-fuzz targets in `fuzz/` feed the decoders arbitrary controller bytes.
@@ -147,8 +151,11 @@ identifier.
   `cargo +nightly fuzz run <target>`; the weekly fuzz job runs all three for a bounded time.
 
 The public structs that a later release may widen (`Completion`, `IdentifyNamespace` and
-`Namespace`) are `#[non_exhaustive]`. Build a `Namespace` with `Namespace::new`, and read the other
-two from the controller's answer.
+`Namespace`) are `#[non_exhaustive]`. Build a `Namespace` from the Identify answer with
+`Namespace::from_identify`, or with `Namespace::new` when there is no answer to read, and read the
+other two from the controller's answer. Before Identify has answered, a driver holds
+`Option<IdentifyNamespace>`; no placeholder value of the type stands for a namespace nobody has
+read.
 
 ## How it differs from Linux and the Rust drivers
 

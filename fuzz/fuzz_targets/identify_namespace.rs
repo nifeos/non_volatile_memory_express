@@ -4,17 +4,17 @@
 //! The input's first 32 bytes choose what a driver asks next (a block number, a buffer address, a
 //! direction, a transfer unit of any size), and the rest is the structure. The target holds the two
 //! parse functions to each other and to what they promise: `parse_identify_namespace` accepts only
-//! a shift of 9 to 12 and then agrees with `logical_block_format_size_shift`, a 4096-byte unit
-//! always covers 1 to 8 logical blocks, and the namespace built from the answer builds a transfer
-//! command only for a block it holds. Any other unit, including one of 65536 logical blocks or
-//! more, either covers a nonzero count of whole blocks that a transfer command can carry, or is
-//! refused.
+//! a shift of 9 to 12 and then agrees with `logical_block_size_shift`, and a 4096-byte unit always
+//! covers 1 to 8 logical blocks. The namespace built from the answer is refused only when its
+//! capacity in bytes would wrap, and builds a transfer command only for a block it holds. Any other
+//! unit, including one of 65536 logical blocks or more, either covers a nonzero count of whole
+//! blocks that a transfer command can carry, or is refused.
 
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
 use non_volatile_memory_express::{
-    Namespace, logical_block_format_size_shift, parse_identify_namespace,
+    Direction, Namespace, logical_block_size_shift, parse_identify_namespace,
 };
 
 /// The transfer unit this crate serves: one 4096-byte block.
@@ -27,7 +27,7 @@ fuzz_target!(|data: &[u8]| {
     let word = |at: usize| u64::from_le_bytes(request[at..at + 8].try_into().unwrap());
     let (block, address, flags, any_unit) = (word(0), word(8), word(16), word(24));
 
-    let reported = logical_block_format_size_shift(structure);
+    let reported = logical_block_size_shift(structure);
     assert_eq!(reported.is_some(), structure.len() >= 384);
     let Some(namespace) = parse_identify_namespace(structure) else {
         return;
@@ -45,22 +45,36 @@ fuzz_target!(|data: &[u8]| {
     assert!((1..=8).contains(&per_transfer));
     assert_eq!(namespace.blocks_per_transfer(0), None);
 
-    let device = Namespace::new(namespace.capacity_bytes(), per_transfer);
-    let held = device.holds_whole_block(block, UNIT);
-    let command = device.transfer_command(
-        flags as u16,
-        (flags >> 16) as u32,
-        block,
-        UNIT,
-        address,
-        UNIT,
-        flags & (1 << 63) != 0,
-    );
-    if command.is_some() {
-        assert!(held, "a command for a block the namespace does not hold");
-    }
-    if held && address & (UNIT - 1) == 0 {
-        assert!(command.is_some(), "a held, aligned block built no command");
+    let capacity_fits = namespace
+        .blocks
+        .checked_mul(1 << namespace.logical_block_size_shift)
+        .is_some();
+    let direction = if flags & (1 << 63) != 0 {
+        Direction::Write
+    } else {
+        Direction::Read
+    };
+    match Namespace::from_identify(&namespace, UNIT) {
+        Some(device) => {
+            assert!(capacity_fits, "a namespace whose capacity wraps a u64");
+            assert_eq!(device.blocks_per_transfer(), per_transfer);
+            let held = device.holds_whole_block(block);
+            let command = device.transfer_command(
+                flags as u16,
+                (flags >> 16) as u32,
+                block,
+                address,
+                UNIT,
+                direction,
+            );
+            if command.is_some() {
+                assert!(held, "a command for a block the namespace does not hold");
+            }
+            if held && address & (UNIT - 1) == 0 {
+                assert!(command.is_some(), "a held, aligned block built no command");
+            }
+        }
+        None => assert!(!capacity_fits, "refused a namespace it can serve"),
     }
 
     // A unit of any size, and the two either side of the largest count a command carries. The
@@ -77,8 +91,10 @@ fuzz_target!(|data: &[u8]| {
                 assert_eq!(u64::from(count) << shift, unit, "a truncated count");
                 // The count reaches the command builders, which refuse a zero, and must not
                 // panic for any block or address.
-                let device = Namespace::new(namespace.capacity_bytes(), count);
-                let _ = device.transfer_command(1, 1, block, unit, address, UNIT, flags & 1 != 0);
+                if let Some(device) = Namespace::from_identify(&namespace, unit) {
+                    assert_eq!(device.blocks_per_transfer(), count);
+                    let _ = device.transfer_command(1, 1, block, address, UNIT, direction);
+                }
             }
             None => assert!(!(whole && fits), "refused a unit it can serve"),
         }

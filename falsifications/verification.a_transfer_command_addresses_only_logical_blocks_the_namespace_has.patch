@@ -1,0 +1,21 @@
+Falsifies `non_volatile_memory_express::verification::a_transfer_command_addresses_only_logical_blocks_the_namespace_has`.
+
+The defect: `Namespace::transfer_command` computes the starting logical block as if every format
+had 512-byte logical blocks, multiplying the block number by `unit_bytes / 512` instead of by the
+stored `blocks_per_transfer`. On a namespace formatted with 4096-byte logical blocks the command
+then names a logical block eight times too far along, while the byte bound still passes.
+
+Expected to fail: the harness's `assert!(starting_logical_block + blocks <= namespace_blocks)`.
+
+diff --git a/src/namespace.rs b/src/namespace.rs
+--- a/src/namespace.rs
++++ b/src/namespace.rs
+@@ -126,7 +126,7 @@
+         if !self.holds_whole_block(block) {
+             return None;
+         }
+-        let starting_logical_block = block.checked_mul(u64::from(self.blocks_per_transfer))?;
++        let starting_logical_block = block.checked_mul(self.unit_bytes / 512)?;
+         let pages =
+             physical_region_page_pair(data_physical_address, self.unit_bytes, page_size_bytes)?;
+         let blocks = self.blocks_per_transfer;

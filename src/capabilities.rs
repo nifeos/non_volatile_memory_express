@@ -30,7 +30,7 @@ impl Capabilities {
     /// with `CC.MPS` = 0, i.e. 4 KiB pages, so bring-up checks this is at most 4096.
     #[doc(alias = "CAP.MPSMIN")]
     #[doc(alias = "MPSMIN")]
-    pub fn minimum_page_size(self) -> u64 {
+    pub fn minimum_page_size_bytes(self) -> u64 {
         1u64 << (12 + ((self.0 >> 48) & 0xf))
     }
 }
@@ -47,6 +47,6 @@ mod tests {
         assert_eq!(capabilities.maximum_queue_entries(), 0x800);
         assert_eq!(capabilities.timeout_in_500_millisecond_units(), 0xf);
         assert_eq!(capabilities.doorbell_stride(), 2);
-        assert_eq!(capabilities.minimum_page_size(), 8192);
+        assert_eq!(capabilities.minimum_page_size_bytes(), 8192);
     }
 }

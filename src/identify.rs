@@ -32,7 +32,7 @@ pub fn parse_identify_namespace(data: &[u8]) -> Option<IdentifyNamespace> {
 /// It exists so a refusal can say what it refused. A drive must be formatted so that
 /// `blocks_per_transfer` falls in `1..=8`, and a namespace this driver declines has to print its
 /// LBA size rather than arrive as a server that never started and a test that reads "skipped".
-pub fn logical_block_format_size_shift(data: &[u8]) -> Option<u8> {
+pub fn logical_block_size_shift(data: &[u8]) -> Option<u8> {
     if data.len() < 384 {
         return None;
     }
@@ -41,8 +41,9 @@ pub fn logical_block_format_size_shift(data: &[u8]) -> Option<u8> {
 }
 
 /// See [`parse_identify_namespace`]. The struct is `#[non_exhaustive]`: a later release may read
-/// more of the structure, so code outside the crate gets one from the parse, or from
-/// [`Default`] as a placeholder before Identify has run.
+/// more of the structure, so code outside the crate gets one only from the parse. A driver holds
+/// `Option<IdentifyNamespace>` for the time before Identify has answered, so no value of this type
+/// stands for a namespace nobody has read.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct IdentifyNamespace {
@@ -57,45 +58,36 @@ pub struct IdentifyNamespace {
     pub logical_block_size_shift: u32,
 }
 
-impl Default for IdentifyNamespace {
-    /// An empty namespace of 512-byte blocks: the placeholder a driver holds before Identify has
-    /// answered. It satisfies the same bounds as a parsed one (a shift between 9 and 12).
-    fn default() -> Self {
-        IdentifyNamespace {
-            blocks: 0,
-            logical_block_size_shift: 9,
-        }
-    }
-}
-
 impl IdentifyNamespace {
     /// The namespace's capacity in bytes.
     pub fn capacity_bytes(&self) -> u64 {
         self.blocks << self.logical_block_size_shift
     }
-    /// How many logical blocks one `unit`-byte transfer covers, always at least 1. `None` if
-    /// `unit` is zero, is not a whole number of logical blocks (a namespace this driver cannot
-    /// serve 4096-byte blocks on; `parse_identify_namespace`'s shift bounds make it impossible for
-    /// unit 4096), or covers more than the 65535 logical blocks a `u16` count holds (a unit of
-    /// 65536 blocks or more, which would otherwise wrap to a count of 0 that
+    /// How many logical blocks one `unit_bytes`-byte transfer covers, always at least 1. `None` if
+    /// `unit_bytes` is zero, is not a whole number of logical blocks (a namespace this driver
+    /// cannot serve 4096-byte blocks on; `parse_identify_namespace`'s shift bounds make it
+    /// impossible for a unit of 4096 bytes), or covers more than the 65535 logical blocks a `u16`
+    /// count holds (a unit of 65536 blocks or more, which would otherwise wrap to a count of 0 that
     /// [`crate::Command::read`] and [`crate::Command::write`] refuse).
     ///
     /// # Examples
     ///
     /// ```
-    /// use non_volatile_memory_express::IdentifyNamespace;
+    /// use non_volatile_memory_express::{IdentifyNamespace, parse_identify_namespace};
     ///
-    /// let namespace = IdentifyNamespace::default(); // 512-byte logical blocks
+    /// let mut structure = [0u8; 4096];
+    /// structure[130] = 9; // format 0, the one in use, has 512-byte logical blocks
+    /// let namespace: IdentifyNamespace = parse_identify_namespace(&structure).unwrap();
     /// assert_eq!(namespace.blocks_per_transfer(4096), Some(8));
     /// assert_eq!(namespace.blocks_per_transfer(65_535 * 512), Some(65_535));
     /// assert_eq!(namespace.blocks_per_transfer(65_536 * 512), None); // too many to count
     /// assert_eq!(namespace.blocks_per_transfer(1000), None); // not a whole number of blocks
     /// ```
-    pub fn blocks_per_transfer(&self, unit: u64) -> Option<u16> {
-        if unit == 0 || unit & ((1 << self.logical_block_size_shift) - 1) != 0 {
+    pub fn blocks_per_transfer(&self, unit_bytes: u64) -> Option<u16> {
+        if unit_bytes == 0 || unit_bytes & ((1 << self.logical_block_size_shift) - 1) != 0 {
             return None;
         }
-        u16::try_from(unit >> self.logical_block_size_shift).ok()
+        u16::try_from(unit_bytes >> self.logical_block_size_shift).ok()
     }
 }
 
@@ -130,8 +122,8 @@ mod tests {
         data[130] = 9; // format 0: 512 bytes, not the one in use
         data[134] = 13; // format 1: 8192 bytes
         assert!(parse_identify_namespace(&data).is_none());
-        assert_eq!(logical_block_format_size_shift(&data), Some(13));
-        assert_eq!(logical_block_format_size_shift(&[0u8; 383]), None);
+        assert_eq!(logical_block_size_shift(&data), Some(13));
+        assert_eq!(logical_block_size_shift(&[0u8; 383]), None);
     }
 
     /// The shift is read at `128 + 4 * FLBAS + 2` for every format the nibble can name, from a
@@ -146,13 +138,13 @@ mod tests {
             }
             data[26] = format_index | 0x70; // the bits above the format number are not part of it
             assert_eq!(
-                logical_block_format_size_shift(&data),
+                logical_block_size_shift(&data),
                 Some(20 + format_index),
                 "format_index {format_index}"
             );
         }
         assert_eq!(
-            logical_block_format_size_shift(&[0u8; 384]),
+            logical_block_size_shift(&[0u8; 384]),
             Some(0),
             "384 bytes is enough"
         );

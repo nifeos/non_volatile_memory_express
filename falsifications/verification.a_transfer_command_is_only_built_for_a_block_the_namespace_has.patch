@@ -4,21 +4,20 @@ The defect: `Namespace::holds_whole_block` drops its `checked_add(1)`, so it bou
 its last. The block one past the end of the namespace is then accepted and a command is built
 for an LBA the namespace does not have.
 
-Expected to fail: the harness's `assert!((block + 1) * 4096 <= namespace.capacity_bytes)`. The harness's own `(block + 1) *
+Expected to fail: the harness's `assert!((block + 1) * 4096 <= namespace.capacity_bytes())`. The harness's own `(block + 1) *
 4096` also overflows for a huge `block` under this patch, so Kani reports that check too; both
 are the same escape seen from the harness's side.
 
 diff --git a/src/namespace.rs b/src/namespace.rs
-index 6477d27..94b2d51 100644
 --- a/src/namespace.rs
 +++ b/src/namespace.rs
-@@ -51,8 +51,7 @@ impl Namespace {
-     /// `false` for any `block` whose transfer would run past [`Namespace::capacity_bytes`], for one
-     /// whose end overflows a `u64`, and for a `unit` of zero.
-     pub fn holds_whole_block(&self, block: u64, unit: u64) -> bool {
+@@ -97,8 +97,7 @@
+     /// `false` for any `block` whose transfer would run past [`Namespace::capacity_bytes`], and for
+     /// one whose end overflows a `u64`.
+     pub fn holds_whole_block(&self, block: u64) -> bool {
 -        match block
 -            .checked_add(1)
 +        match Some(block)
-             .and_then(|end_block| end_block.checked_mul(unit))
+             .and_then(|end_block| end_block.checked_mul(self.unit_bytes))
          {
              Some(end) => end <= self.capacity_bytes,

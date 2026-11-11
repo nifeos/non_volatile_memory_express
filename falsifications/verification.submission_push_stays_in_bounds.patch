@@ -1,4 +1,4 @@
-Falsifies `non_volatile_memory_express::verification::sq_push_stays_in_bounds`.
+Falsifies `non_volatile_memory_express::verification::submission_push_stays_in_bounds`.
 
 The defect: `SubmissionQueue::push` advances the tail with a bare `+ 1`, losing the `% entries`. The tail
 doorbell is then written with a value equal to the ring depth, one past the last legal tail.
