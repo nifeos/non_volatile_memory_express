@@ -131,9 +131,7 @@ fn a_transfer_command_is_only_built_for_a_block_the_namespace_has() {
     kani::assume((1..=8).contains(&namespace.blocks_per_transfer));
     let block: u64 = kani::any();
     let data_physical_address: u64 = kani::any();
-    kani::assume(
-        data_physical_address.is_multiple_of(4096) && data_physical_address < u64::MAX - 8192,
-    );
+    kani::assume(data_physical_address % 4096 == 0 && data_physical_address < u64::MAX - 8192);
     if namespace
         .transfer_command(1, 1, block, 4096, data_physical_address, 4096, kani::any())
         .is_some()
@@ -272,11 +270,7 @@ fn blocks_per_transfer_never_truncates_the_count() {
             assert_eq!(u64::from(blocks) << shift, unit);
         }
         None => {
-            assert!(
-                unit == 0
-                    || !unit.is_multiple_of(1 << shift)
-                    || unit >> shift > u64::from(u16::MAX)
-            );
+            assert!(unit == 0 || unit % (1 << shift) != 0 || unit >> shift > u64::from(u16::MAX));
         }
     }
 }
