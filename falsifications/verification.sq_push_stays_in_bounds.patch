@@ -6,12 +6,12 @@ doorbell is then written with a value equal to the ring depth, one past the last
 Expected to fail: the harness's `assert!(queue.tail() < entries)`.
 
 diff --git a/src/queues.rs b/src/queues.rs
-index 71ae985..57a4b42 100644
+index 0adb7a3..4dce36b 100644
 --- a/src/queues.rs
 +++ b/src/queues.rs
-@@ -32,7 +32,7 @@ impl SubmissionQueue {
-     /// changes nothing, when the ring is full: the controller has not yet consumed enough
-     /// commands, and the caller decides whether that is a bug or a reason to wait.
+@@ -43,7 +43,7 @@ impl SubmissionQueue {
+     /// of the tail doorbell, so that a weakly ordered host never lets the controller fetch the
+     /// entry before its contents arrive.
      pub fn push(&mut self) -> Option<u16> {
 -        let next = (self.tail + 1) % self.entries;
 +        let next = self.tail + 1;
