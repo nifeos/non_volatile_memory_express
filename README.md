@@ -67,8 +67,8 @@ To run the proofs, install Kani as its
 [installation guide](https://model-checking.github.io/kani/install-guide.html) says:
 `cargo install --locked kani-verifier --version 0.68.0`, then `cargo kani setup` once (it
 downloads a pinned nightly toolchain). Run `cargo kani` from the crate's directory. The harnesses
-pass on Kani 0.68.0; all eleven take about 30 seconds in total on a laptop-class machine, after
-the setup. To run one, add `--harness <name>`. Eleven harnesses live in the `verification` module:
+pass on Kani 0.68.0; all twelve take about 30 seconds in total on a laptop-class machine, after
+the setup. To run one, add `--harness <name>`. Twelve harnesses live in the `verification` module:
 
 - `submission_push_stays_in_bounds`: a push onto any ring returns a slot inside the ring and leaves
   a legal tail, or returns `None` and changes nothing, and it returns `None` exactly when the ring
@@ -92,6 +92,10 @@ the setup. To run one, add `--harness <name>`. Eleven harnesses live in the `ver
 - `capabilities_decode_is_total_and_reads_the_specified_bits`: for any value of the capabilities
   register, every `Capabilities` field lies in the range its width allows and equals the bits at
   its place in the register.
+- `controller_configuration_round_trips_the_page_size`: `enabled_controller_configuration` accepts
+  exactly the powers of two from 4 KiB to 128 MiB, encodes each so that its Memory Page Size field
+  decodes back to the same size, and accepts every minimum and maximum a capabilities register
+  can name.
 - `completion_decode_is_total_and_rebuilds_dword_three`: for any four dwords, the command
   identifier, the phase tag and the 15-bit status field rebuild dword 3 exactly, so the decode
   loses no bit, doubles none and reads none from the wrong place.
