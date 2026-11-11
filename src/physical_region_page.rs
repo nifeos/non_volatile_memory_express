@@ -21,6 +21,11 @@ pub struct PhysicalRegionPagePair {
 /// not build (its unit is one 4096-byte block), so `None` says "not expressible", and the caller
 /// treats it as a bug rather than a device error.
 ///
+/// # Panics
+///
+/// On a `page_size_bytes` that is not a power of two of at least 512 bytes. The page size is the
+/// caller's configuration, never a value the controller writes.
+///
 /// # Examples
 ///
 /// ```
@@ -47,7 +52,10 @@ pub fn physical_region_page_pair(
     length_bytes: u64,
     page_size_bytes: u64,
 ) -> Option<PhysicalRegionPagePair> {
-    assert!(page_size_bytes.is_power_of_two() && page_size_bytes >= 512);
+    assert!(
+        page_size_bytes.is_power_of_two() && page_size_bytes >= 512,
+        "a page is a power of two of at least 512 bytes"
+    );
     if length_bytes == 0 {
         return None;
     }
