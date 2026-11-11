@@ -1,0 +1,21 @@
+Falsifies `non_volatile_memory_express::verification::controller_configuration_round_trips_the_page_size`.
+
+The defect: `enabled_controller_configuration` shifts the Memory Page Size field to bit 8 instead
+of bit 7. A 4 KiB page still encodes as 0 and passes, but every larger page lands one bit high, so
+the controller reads twice the exponent the driver meant and walks each pointer in pages of the
+wrong size.
+
+Expected to fail: the harness's `assert_eq!(1u64 << (12 + ((configuration >> 7) & 0xf)), page_size_bytes)`.
+
+diff --git a/src/configuration.rs b/src/configuration.rs
+--- a/src/configuration.rs
++++ b/src/configuration.rs
+@@ -35,7 +35,7 @@
+         return None;
+     }
+     let memory_page_size = page_size_bytes.trailing_zeros() - 12;
+-    Some(1 | memory_page_size << 7 | 6 << 16 | 4 << 20)
++    Some(1 | memory_page_size << 8 | 6 << 16 | 4 << 20)
+ }
+ 
+ /// The configuration word's four fields share no bit (the enable at bit 0, MPS at 7:10, IOSQES at

@@ -226,6 +226,36 @@ fn capabilities_decode_is_total_and_reads_the_specified_bits() {
     assert!(page.is_power_of_two());
     assert!((4096..=1u64 << 27).contains(&page));
     assert_eq!(page.trailing_zeros() as u64, 12 + ((register >> 48) & 0xf));
+
+    let page = capabilities.maximum_page_size_bytes();
+    assert!(page.is_power_of_two());
+    assert!((4096..=1u64 << 27).contains(&page));
+    assert_eq!(page.trailing_zeros() as u64, 12 + ((register >> 52) & 0xf));
+}
+
+/// Falsification: replayable `falsifications/verification.controller_configuration_round_trips_the_page_size.patch`
+/// **The configuration word carries exactly the page size it was asked for.** For any byte count,
+/// `enabled_controller_configuration` answers exactly when the count is a power of two from 4 KiB
+/// to 128 MiB, and the answer's Memory Page Size field (bits 7:10) decodes back to that count,
+/// with the enable bit and the two entry sizes set and no other bit. Every page size a
+/// capabilities register names as its minimum or its maximum is one it accepts.
+#[kani::proof]
+fn controller_configuration_round_trips_the_page_size() {
+    let page_size_bytes: u64 = kani::any();
+    let nameable =
+        page_size_bytes.is_power_of_two() && (4096..=1u64 << 27).contains(&page_size_bytes);
+    match enabled_controller_configuration(page_size_bytes) {
+        Some(configuration) => {
+            assert!(nameable);
+            assert_eq!(1u64 << (12 + ((configuration >> 7) & 0xf)), page_size_bytes);
+            assert_eq!(configuration & !(0xf << 7), 0x0046_0001);
+        }
+        None => assert!(!nameable),
+    }
+
+    let capabilities = Capabilities(kani::any());
+    assert!(enabled_controller_configuration(capabilities.minimum_page_size_bytes()).is_some());
+    assert!(enabled_controller_configuration(capabilities.maximum_page_size_bytes()).is_some());
 }
 
 /// Falsification: replayable `falsifications/verification.completion_decode_is_total_and_rebuilds_dword_three.patch`
