@@ -83,7 +83,7 @@ the setup. To run one, add `--harness <name>`. Twelve harnesses live in the `ver
 - `a_transfer_command_is_only_built_for_a_block_the_namespace_has`: `Namespace::transfer_command`
   builds a command only for a block whose last byte lies inside the namespace, and never overflows
   computing its LBA, for any block number, buffer address and namespace size.
-- `a_transfer_command_addresses_only_logical_blocks_the_namespace_has`: the starting logical block
+- `a_transfer_command_names_only_logical_blocks_the_namespace_has`: the starting logical block
   and the count an accepted transfer command carries end inside the namespace, for a 4096-byte
   unit over 512-byte to 4096-byte logical blocks, so the unit and the count cannot disagree.
 - `identify_parse_is_total_and_bounds_the_shift`: no controller response panics the Identify

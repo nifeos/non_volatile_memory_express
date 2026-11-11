@@ -153,14 +153,14 @@ fn a_transfer_command_is_only_built_for_a_block_the_namespace_has() {
     }
 }
 
-/// Falsification: replayable `falsifications/verification.a_transfer_command_addresses_only_logical_blocks_the_namespace_has.patch`
+/// Falsification: replayable `falsifications/verification.a_transfer_command_names_only_logical_blocks_the_namespace_has.patch`
 /// **Every logical block a transfer command names lies inside the namespace.** The byte bound
 /// above is stated in transfer units; the command itself carries a starting logical block and a
 /// count, and those are what the controller reads. For a unit of 4096 bytes and any block count
 /// per unit a 512-byte to 4096-byte format gives, the last logical block an accepted command
 /// names is below the namespace's logical block count, so the unit and the count cannot disagree.
 #[kani::proof]
-fn a_transfer_command_addresses_only_logical_blocks_the_namespace_has() {
+fn a_transfer_command_names_only_logical_blocks_the_namespace_has() {
     let shift: u32 = kani::any();
     kani::assume(shift <= 3);
     let blocks_per_transfer = 1u16 << shift;
