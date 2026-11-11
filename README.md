@@ -152,15 +152,15 @@ two from the controller's answer.
 
 ## How it differs from Linux and the Rust drivers
 
-The Linux driver (`drivers/nvme/host`) owns the whole data path: a tag set per queue, PRP lists
-and scatter-gather lists, many queue pairs, interrupts, reset, timeouts, shutdown and the admin
-command set. The polled user-space driver of the Storage Performance Development Kit (SPDK) does
-the same outside the kernel. Rust driver crates such as `nvme-driver` own their
-direct memory access and issue the commands themselves, and Redox `nvmed` is a driver daemon to
-run. This crate is none of those. It builds one command at a time and walks one ring pair, as pure
-logic with no I/O, no allocator, no `unsafe` and no dependency, so it compiles for any target and
-the model checker reaches all of it. It checks what the controller hands back instead of trusting
-it: a submission queue head the controller cannot have reached is an error, not a recorded value.
+The Linux driver (`drivers/nvme/host`) owns the whole data path: a tag set per queue, PRP lists and
+scatter-gather lists, many queue pairs, interrupts, reset, timeouts, shutdown and the admin command
+set. The polled user-space driver of the Storage Performance Development Kit (SPDK) does the same
+outside the kernel. Rust driver crates such as `nvme-driver` own their direct memory access and
+issue the commands themselves, and Redox `nvmed` is a driver service of its own. This crate is none
+of those. It builds one command at a time and walks one ring pair, as pure logic with no I/O, no
+allocator, no `unsafe` and no dependency, so it compiles for any target and the model checker
+reaches all of it. It checks what the controller hands back instead of trusting it: a submission
+queue head the controller cannot have reached is an error, not a recorded value.
 
 What that costs you: you write the volatile register accessors, the direct memory access
 allocation, the admin bring-up sequence, the command identifier tracking and every wait. A transfer
