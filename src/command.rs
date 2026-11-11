@@ -63,18 +63,18 @@ impl Command {
     }
 
     /// Identify (admin): the 4096-byte data structure named by `controller_or_namespace_structure`
-    /// lands at `physical_region_page`.
+    /// lands at `data_physical_address`.
     pub fn identify(
         command_id: u16,
         controller_or_namespace_structure: u32,
         namespace_id: u32,
-        physical_region_page: u64,
+        data_physical_address: u64,
     ) -> Self {
         let mut command = Self::new(
             ADMIN_IDENTIFY,
             command_id,
             namespace_id,
-            physical_region_page,
+            data_physical_address,
             0,
         );
         command.0[10] = controller_or_namespace_structure;
@@ -82,7 +82,7 @@ impl Command {
     }
 
     /// Create I/O Completion Queue (admin): queue `queue_id`, `entries` deep, physically contiguous
-    /// (`PC`=1) at `physical_region_page`. Interrupts stay off (`IEN`=0): the driver completes by
+    /// (`PC`=1) at `queue_physical_address`. Interrupts stay off (`IEN`=0): the driver completes by
     /// polling the phase tag, so no vector is named and none is needed.
     ///
     /// The caller keeps `entries` within [`crate::Capabilities::maximum_queue_entries`] and
@@ -95,13 +95,13 @@ impl Command {
         command_id: u16,
         queue_id: u16,
         entries: u16,
-        physical_region_page: u64,
+        queue_physical_address: u64,
     ) -> Self {
         let mut command = Self::new(
             ADMIN_CREATE_IO_COMPLETION_QUEUE,
             command_id,
             0,
-            physical_region_page,
+            queue_physical_address,
             0,
         );
         assert!(entries >= 2, "an I/O queue holds at least two entries");
@@ -111,7 +111,7 @@ impl Command {
     }
 
     /// Create I/O Submission Queue (admin): queue `queue_id`, `entries` deep, physically contiguous at
-    /// `physical_region_page`, completing into completion queue `completion_queue_id` (which must already exist,
+    /// `queue_physical_address`, completing into completion queue `completion_queue_id` (which must already exist,
     /// so the pair is created completion queue first).
     ///
     /// The caller keeps `entries` within [`crate::Capabilities::maximum_queue_entries`] and
@@ -125,13 +125,13 @@ impl Command {
         queue_id: u16,
         entries: u16,
         completion_queue_id: u16,
-        physical_region_page: u64,
+        queue_physical_address: u64,
     ) -> Self {
         let mut command = Self::new(
             ADMIN_CREATE_IO_SUBMISSION_QUEUE,
             command_id,
             0,
-            physical_region_page,
+            queue_physical_address,
             0,
         );
         assert!(entries >= 2, "an I/O queue holds at least two entries");

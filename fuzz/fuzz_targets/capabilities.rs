@@ -29,7 +29,7 @@ fuzz_target!(|data: &[u8]| {
     assert!(capabilities.timeout_in_500_millisecond_units() <= 0xff);
     let stride = capabilities.doorbell_stride();
     assert!(stride <= 0xf);
-    let page = capabilities.minimum_page_size();
+    let page = capabilities.minimum_page_size_bytes();
     assert!(page.is_power_of_two() && (1 << 12..=1 << 27).contains(&page));
 
     let spacing = 4u64 << stride;

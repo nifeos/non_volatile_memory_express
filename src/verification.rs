@@ -10,11 +10,11 @@
 
 use crate::*;
 
-/// Falsification: replayable `falsifications/verification.cq_pop_stays_in_bounds_and_flips_only_at_the_wrap.patch`
+/// Falsification: replayable `falsifications/verification.completion_pop_stays_in_bounds_and_flips_only_at_the_wrap.patch`
 /// **The completion head stays in bounds and flips the phase exactly at the wrap**, for every
 /// reachable state, not just the ones a test happened to walk.
 #[kani::proof]
-fn cq_pop_stays_in_bounds_and_flips_only_at_the_wrap() {
+fn completion_pop_stays_in_bounds_and_flips_only_at_the_wrap() {
     let entries: u16 = kani::any();
     let head: u16 = kani::any();
     let phase: bool = kani::any();
@@ -38,12 +38,12 @@ fn cq_pop_stays_in_bounds_and_flips_only_at_the_wrap() {
     assert_eq!(queue.phase != phase, queue.head == 0);
 }
 
-/// Falsification: replayable `falsifications/verification.sq_push_stays_in_bounds.patch`
+/// Falsification: replayable `falsifications/verification.submission_push_stays_in_bounds.patch`
 /// **A submission push lands in bounds from any state, and refuses exactly when the ring is
 /// full.** A full ring answers `None` and changes nothing; any other ring hands back a slot inside
 /// it and leaves a legal tail, which is the doorbell value the caller writes.
 #[kani::proof]
-fn sq_push_stays_in_bounds() {
+fn submission_push_stays_in_bounds() {
     let entries: u16 = kani::any();
     let tail: u16 = kani::any();
     let head: u16 = kani::any();
@@ -127,19 +127,57 @@ fn physical_region_page_pair_is_total_and_page_disciplined() {
 /// caller-supplied `u64` must not be able to wrap into a valid-looking address.
 #[kani::proof]
 fn a_transfer_command_is_only_built_for_a_block_the_namespace_has() {
-    let namespace = Namespace::new(kani::any(), kani::any());
-    kani::assume((1..=8).contains(&namespace.blocks_per_transfer));
+    let blocks_per_transfer: u16 = kani::any();
+    kani::assume((1..=8).contains(&blocks_per_transfer));
+    let Some(namespace) = Namespace::new(kani::any(), 4096, blocks_per_transfer) else {
+        // A unit of 4096 bytes is no whole number of 3-, 5-, 6- or 7-block logical blocks.
+        assert!(4096 % blocks_per_transfer != 0);
+        return;
+    };
     let block: u64 = kani::any();
     let data_physical_address: u64 = kani::any();
     kani::assume(data_physical_address % 4096 == 0 && data_physical_address < u64::MAX - 8192);
+    let direction = if kani::any() {
+        Direction::Read
+    } else {
+        Direction::Write
+    };
     if namespace
-        .transfer_command(1, 1, block, 4096, data_physical_address, 4096, kani::any())
+        .transfer_command(1, 1, block, data_physical_address, 4096, direction)
         .is_some()
     {
-        assert!(namespace.holds_whole_block(block, 4096));
+        assert!(namespace.holds_whole_block(block));
         // The transfer's last byte is inside the namespace, which is the property
         // `holds_whole_block` exists to state and the one a wrap would quietly break.
-        assert!((block + 1) * 4096 <= namespace.capacity_bytes);
+        assert!((block + 1) * 4096 <= namespace.capacity_bytes());
+    }
+}
+
+/// Falsification: replayable `falsifications/verification.a_transfer_command_names_only_logical_blocks_the_namespace_has.patch`
+/// **Every logical block a transfer command names lies inside the namespace.** The byte bound
+/// above is stated in transfer units; the command itself carries a starting logical block and a
+/// count, and those are what the controller reads. For a unit of 4096 bytes and any block count
+/// per unit a 512-byte to 4096-byte format gives, the last logical block an accepted command
+/// names is below the namespace's logical block count, so the unit and the count cannot disagree.
+#[kani::proof]
+fn a_transfer_command_names_only_logical_blocks_the_namespace_has() {
+    let shift: u32 = kani::any();
+    kani::assume(shift <= 3);
+    let blocks_per_transfer = 1u16 << shift;
+    let namespace = Namespace::new(kani::any(), 4096, blocks_per_transfer).unwrap();
+    let block: u64 = kani::any();
+    let direction = if kani::any() {
+        Direction::Read
+    } else {
+        Direction::Write
+    };
+    if let Some(command) = namespace.transfer_command(1, 1, block, 0x1000, 4096, direction) {
+        let starting_logical_block = u64::from(command.0[10]) | u64::from(command.0[11]) << 32;
+        let blocks = u64::from(command.0[12] & 0xffff) + 1;
+        assert_eq!(blocks, u64::from(blocks_per_transfer));
+        let logical_block_bytes = 4096 / u64::from(blocks_per_transfer);
+        let namespace_blocks = namespace.capacity_bytes() / logical_block_bytes;
+        assert!(starting_logical_block + blocks <= namespace_blocks);
     }
 }
 
@@ -184,7 +222,7 @@ fn capabilities_decode_is_total_and_reads_the_specified_bits() {
         (register >> 24) & 0xff
     );
 
-    let page = capabilities.minimum_page_size();
+    let page = capabilities.minimum_page_size_bytes();
     assert!(page.is_power_of_two());
     assert!((4096..=1u64 << 27).contains(&page));
     assert_eq!(page.trailing_zeros() as u64, 12 + ((register >> 48) & 0xf));
