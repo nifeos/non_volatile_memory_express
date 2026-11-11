@@ -98,8 +98,8 @@ module:
   namespace parse, and every accepted LBA shift lies between 9 and 12, so a 4 KiB transfer covers
   1 to 8 logical blocks.
 - `identify_controller_parse_is_total_and_reads_its_bytes`: no controller response panics the
-  Identify Controller parse, every answer of 520 bytes or more is accepted with the transfer limit
-  read from byte 77 and the namespace count from bytes 516 to 519, and the limit in bytes is the
+  Identify Controller parse. Every answer of 520 bytes or more is accepted, with the transfer limit
+  read from byte 77 and the namespace count from bytes 516 to 519. The limit in bytes is the
   minimum page shifted by the exponent, or `u64::MAX` when there is none or it does not fit.
 - `capabilities_decode_is_total_and_reads_the_specified_bits`: for any value of the capabilities
   register, every `Capabilities` field lies in the range its width allows and equals the bits at
