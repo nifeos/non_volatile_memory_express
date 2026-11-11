@@ -80,7 +80,7 @@ fn run(batches: usize) -> (Vec<u16>, String) {
         controller.ring_submission_tail(submission_queue.tail());
         loop {
             let dwords = controller.completion_ring[usize::from(completion_queue.head())];
-            if Completion::phase_of(dwords[3]) != completion_queue.expected_phase() {
+            if Completion::is_phase_tag_set(dwords[3]) != completion_queue.expects_phase_tag_set() {
                 break; // a stale entry, from the last lap or the initial zeros: nothing more yet
             }
             let completion = Completion::from_dwords(dwords);
