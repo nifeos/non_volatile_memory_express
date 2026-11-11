@@ -1,5 +1,6 @@
-//! **The Controller Configuration values** that enable the controller for this driver and ask it to
-//! shut down cleanly.
+//! **The register values** a driver writes to bring the controller up and down: the admin queue
+//! sizes, the Controller Configuration that enables it, and the one that asks it to shut down
+//! cleanly.
 
 /// The Controller Configuration (`CC`) value that enables the controller with memory pages of
 /// `page_size_bytes`: Enable (`EN`) = 1, I/O Command Set Selected (CSS) = 0 (the NVM command set),
@@ -71,6 +72,39 @@ pub fn shutdown_controller_configuration(configuration: u32) -> u32 {
     (configuration & !(0b11 << 14)) | 0b01 << 14
 }
 
+/// The Admin Queue Attributes (`AQA`) value for an admin submission queue of
+/// `submission_entries` slots and an admin completion queue of `completion_entries` slots:
+/// Admin Completion Queue Size (`ACQS`, bits 16:27) and Admin Submission Queue Size (`ASQS`, bits
+/// 0:11), each the entry count minus one, since the register counts from 0. The driver writes it
+/// to [`crate::registers::ADMIN_QUEUE_ATTRIBUTES_REGISTER`] before it sets the enable bit, and
+/// builds its [`crate::SubmissionQueue`] and [`crate::CompletionQueue`] with the same counts.
+///
+/// # Examples
+///
+/// ```
+/// use non_volatile_memory_express::admin_queue_attributes;
+///
+/// // A 32-slot admin submission queue and a 32-slot admin completion queue.
+/// assert_eq!(admin_queue_attributes(32, 32), 0x001f_001f);
+/// ```
+///
+/// # Panics
+///
+/// On either count below 2, the specification's minimum queue size, or above 4096, the most a
+/// 12-bit field can name.
+#[doc(alias = "AQA")]
+#[doc(alias = "AQA.ASQS")]
+#[doc(alias = "AQA.ACQS")]
+#[doc(alias = "ASQS")]
+#[doc(alias = "ACQS")]
+pub fn admin_queue_attributes(submission_entries: u16, completion_entries: u16) -> u32 {
+    assert!(
+        (2..=4096).contains(&submission_entries) && (2..=4096).contains(&completion_entries),
+        "an admin queue holds 2 to 4096 entries"
+    );
+    (completion_entries as u32 - 1) << 16 | (submission_entries as u32 - 1)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -137,5 +171,40 @@ mod tests {
             assert_eq!((shutdown >> 14) & 0b11, 0b01, "{configuration:#x}");
             assert_eq!(shutdown & !(0b11 << 14), configuration & !(0b11 << 14));
         }
+    }
+
+    /// Each count lands 0-based in its own 12-bit field, the smallest and largest counts included,
+    /// and the reserved bits (12:15 and 28:31) stay clear.
+    #[test]
+    fn the_admin_queue_sizes_pack_0_based_into_their_fields() {
+        assert_eq!(admin_queue_attributes(2, 2), 0x0001_0001);
+        assert_eq!(admin_queue_attributes(4096, 2), 0x0001_0fff);
+        assert_eq!(admin_queue_attributes(2, 4096), 0x0fff_0001);
+        assert_eq!(admin_queue_attributes(64, 16), 0x000f_003f);
+        assert_eq!(admin_queue_attributes(4096, 4096) & 0xf000_f000, 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "an admin queue holds 2 to 4096 entries")]
+    fn an_admin_submission_queue_of_one_entry_is_refused() {
+        admin_queue_attributes(1, 2);
+    }
+
+    #[test]
+    #[should_panic(expected = "an admin queue holds 2 to 4096 entries")]
+    fn an_admin_completion_queue_of_one_entry_is_refused() {
+        admin_queue_attributes(2, 1);
+    }
+
+    #[test]
+    #[should_panic(expected = "an admin queue holds 2 to 4096 entries")]
+    fn an_admin_submission_queue_beyond_the_field_is_refused() {
+        admin_queue_attributes(4097, 2);
+    }
+
+    #[test]
+    #[should_panic(expected = "an admin queue holds 2 to 4096 entries")]
+    fn an_admin_completion_queue_beyond_the_field_is_refused() {
+        admin_queue_attributes(2, 4097);
     }
 }

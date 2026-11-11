@@ -258,6 +258,24 @@ fn controller_configuration_round_trips_the_page_size() {
     assert!(enabled_controller_configuration(capabilities.maximum_page_size_bytes()).is_some());
 }
 
+/// Falsification: replayable `falsifications/verification.admin_queue_attributes_round_trip_the_two_sizes.patch`
+/// **The admin queue sizes reach the controller as the counts the driver built its rings with.**
+/// For any two counts from 2 to 4096, the submission size decodes from bits 0:11 and the
+/// completion size from bits 16:27, each plus one, back to the count asked for, and no reserved
+/// bit is set. A ring the driver builds with the same count therefore wraps where the controller's
+/// does.
+#[kani::proof]
+fn admin_queue_attributes_round_trip_the_two_sizes() {
+    let submission_entries: u16 = kani::any();
+    let completion_entries: u16 = kani::any();
+    kani::assume((2..=4096).contains(&submission_entries));
+    kani::assume((2..=4096).contains(&completion_entries));
+    let attributes = admin_queue_attributes(submission_entries, completion_entries);
+    assert_eq!((attributes & 0xfff) + 1, submission_entries as u32);
+    assert_eq!(((attributes >> 16) & 0xfff) + 1, completion_entries as u32);
+    assert_eq!(attributes & 0xf000_f000, 0);
+}
+
 /// Falsification: replayable `falsifications/verification.a_shutdown_notification_changes_only_its_field.patch`
 /// **A shutdown notification is normal and touches nothing else.** For any configuration word the
 /// driver last wrote, `shutdown_controller_configuration` leaves Shutdown Notification (bits

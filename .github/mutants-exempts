@@ -12,6 +12,7 @@
 src/command.rs:108 # `|` to `^`: the queue identifier fills bits 0:15 and the 0-based size bits 16:31, no shared bit, so the word is the same for every input
 src/command.rs:138 # `|` to `^`: the queue identifier fills bits 0:15 and the 0-based size bits 16:31, no shared bit, so the word is the same for every input
 src/command.rs:139 # `|` to `^`: physically contiguous is bit 0 and the completion queue identifier bits 16:31, no shared bit, so the word is the same for every input
-src/configuration.rs:39 # `|` to `^`: EN, MPS, IOSQES and IOCQES share no bit (CONTROLLER_CONFIGURATION_FIELDS_DO_NOT_OVERLAP), so the word is the same for every accepted page size
-src/configuration.rs:71 # `|` to `^`: the mask has just cleared bits 14:15, so setting bit 14 by `|` or by `^` gives the same word for every input
+src/configuration.rs:40 # `|` to `^`: EN, MPS, IOSQES and IOCQES share no bit (CONTROLLER_CONFIGURATION_FIELDS_DO_NOT_OVERLAP), so the word is the same for every accepted page size
+src/configuration.rs:72 # `|` to `^`: the mask has just cleared bits 14:15, so setting bit 14 by `|` or by `^` gives the same word for every input
+src/configuration.rs:105 # `|` to `^`: the 0-based completion size fills bits 16:27 and the 0-based submission size bits 0:11, no shared bit, so the word is the same for every accepted pair
 src/registers.rs:36 # CONTROLLER_STATUS_READY is `1 << 0`; `1 >> 0` is also 1, so the constant is unchanged

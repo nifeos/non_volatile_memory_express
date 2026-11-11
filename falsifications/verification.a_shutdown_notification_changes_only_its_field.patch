@@ -11,7 +11,7 @@ Expected to fail: the harness's `assert_eq!((shutdown >> 14) & 0b11, 0b01)`.
 diff --git a/src/configuration.rs b/src/configuration.rs
 --- a/src/configuration.rs
 +++ b/src/configuration.rs
-@@ -68,7 +68,7 @@
+@@ -69,7 +69,7 @@
  #[doc(alias = "CC.SHN")]
  #[doc(alias = "SHN")]
  pub fn shutdown_controller_configuration(configuration: u32) -> u32 {
@@ -19,4 +19,4 @@ diff --git a/src/configuration.rs b/src/configuration.rs
 +    configuration | 0b01 << 14
  }
  
- #[cfg(test)]
+ /// The Admin Queue Attributes (`AQA`) value for an admin submission queue of
