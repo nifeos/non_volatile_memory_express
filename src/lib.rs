@@ -22,10 +22,13 @@ pub use command::{
     Command, NON_VOLATILE_MEMORY_FLUSH, NON_VOLATILE_MEMORY_READ, NON_VOLATILE_MEMORY_WRITE,
 };
 pub use completion::Completion;
-pub use configuration::enabled_controller_configuration;
+pub use configuration::{enabled_controller_configuration, shutdown_controller_configuration};
 pub use doorbell::{Doorbell, doorbell};
 pub use identify::{IdentifyNamespace, logical_block_size_shift, parse_identify_namespace};
 pub use namespace::{Direction, Namespace};
 pub use physical_region_page::{PhysicalRegionPagePair, physical_region_page_pair};
 pub use queues::{CompletionQueue, ImpossibleHeadError, SubmissionQueue};
-pub use registers::{CONTROLLER_STATUS_FATAL, CONTROLLER_STATUS_READY};
+pub use registers::{
+    CONTROLLER_STATUS_FATAL, CONTROLLER_STATUS_READY, CONTROLLER_STATUS_SHUTDOWN_COMPLETE,
+    CONTROLLER_STATUS_SHUTDOWN_OCCURRING,
+};

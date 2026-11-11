@@ -258,6 +258,28 @@ fn controller_configuration_round_trips_the_page_size() {
     assert!(enabled_controller_configuration(capabilities.maximum_page_size_bytes()).is_some());
 }
 
+/// Falsification: replayable `falsifications/verification.a_shutdown_notification_changes_only_its_field.patch`
+/// **A shutdown notification is normal and touches nothing else.** For any configuration word the
+/// driver last wrote, `shutdown_controller_configuration` leaves Shutdown Notification (bits
+/// 14:15) at 01b, the normal notification, whatever the field held before (an abrupt 10b or the
+/// reserved 11b included), and keeps every other bit, so the enable bit, the page size and the
+/// entry sizes stay as they were. The two Shutdown Status bits lie in the field the specification
+/// gives them (bits 2:3) and share no bit with the ready or fatal bit.
+#[kani::proof]
+fn a_shutdown_notification_changes_only_its_field() {
+    let configuration: u32 = kani::any();
+    let shutdown = shutdown_controller_configuration(configuration);
+    assert_eq!((shutdown >> 14) & 0b11, 0b01);
+    assert_eq!(shutdown & !(0b11 << 14), configuration & !(0b11 << 14));
+
+    let status = CONTROLLER_STATUS_SHUTDOWN_OCCURRING | CONTROLLER_STATUS_SHUTDOWN_COMPLETE;
+    assert_eq!(status, 0b11 << 2);
+    assert_eq!(
+        status & (CONTROLLER_STATUS_READY | CONTROLLER_STATUS_FATAL),
+        0
+    );
+}
+
 /// Falsification: replayable `falsifications/verification.completion_decode_is_total_and_rebuilds_dword_three.patch`
 /// **The completion status decoder is total and reads exactly the specification's bit
 /// positions**, for any four dwords a controller may write. The status field is the 15 bits above

@@ -1,0 +1,22 @@
+Falsifies `non_volatile_memory_express::verification::a_shutdown_notification_changes_only_its_field`.
+
+The defect: `shutdown_controller_configuration` sets bit 14 without clearing the Shutdown
+Notification field first. From a running configuration (the field at 00b) it still writes 01b and
+passes, but over a word that carries an earlier abrupt notification (10b) it writes 11b, a value
+the specification reserves, and the controller may ignore the notification and never flush its
+cache.
+
+Expected to fail: the harness's `assert_eq!((shutdown >> 14) & 0b11, 0b01)`.
+
+diff --git a/src/configuration.rs b/src/configuration.rs
+--- a/src/configuration.rs
++++ b/src/configuration.rs
+@@ -68,7 +68,7 @@
+ #[doc(alias = "CC.SHN")]
+ #[doc(alias = "SHN")]
+ pub fn shutdown_controller_configuration(configuration: u32) -> u32 {
+-    (configuration & !(0b11 << 14)) | 0b01 << 14
++    configuration | 0b01 << 14
+ }
+ 
+ #[cfg(test)]

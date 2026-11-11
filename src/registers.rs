@@ -40,6 +40,18 @@ pub const CONTROLLER_STATUS_READY: u32 = 1 << 0;
 #[doc(alias = "CFS")]
 pub const CONTROLLER_STATUS_FATAL: u32 = 1 << 1;
 
+/// Controller Status bit 2, the low bit of Shutdown Status (`CSTS.SHST` = 01b): the controller is
+/// processing a shutdown notification and is not done.
+#[doc(alias = "CSTS.SHST")]
+#[doc(alias = "SHST")]
+pub const CONTROLLER_STATUS_SHUTDOWN_OCCURRING: u32 = 1 << 2;
+/// Controller Status bit 3, the high bit of Shutdown Status (`CSTS.SHST` = 10b): the controller has
+/// finished its shutdown processing, and the host may clear the enable bit or remove power. See
+/// [`crate::shutdown_controller_configuration`].
+#[doc(alias = "CSTS.SHST")]
+#[doc(alias = "SHST")]
+pub const CONTROLLER_STATUS_SHUTDOWN_COMPLETE: u32 = 1 << 3;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -51,5 +63,13 @@ mod tests {
         // the wrong bit (the fatal bit is bit 1, the ready bit is bit 0).
         assert_eq!(CONTROLLER_STATUS_FATAL, 0b10);
         assert_ne!(CONTROLLER_STATUS_FATAL, CONTROLLER_STATUS_READY);
+    }
+
+    #[test]
+    fn the_shutdown_status_bits_are_bits_2_and_3() {
+        // Shutdown Status is the two-bit field at bits 2:3: 01b while the controller processes a
+        // notification, 10b once it is done.
+        assert_eq!(CONTROLLER_STATUS_SHUTDOWN_OCCURRING, 0b0100);
+        assert_eq!(CONTROLLER_STATUS_SHUTDOWN_COMPLETE, 0b1000);
     }
 }
