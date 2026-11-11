@@ -1,0 +1,23 @@
+Falsifies `non_volatile_memory_express::verification::no_command_identifier_releases_twice`.
+
+The defect: `InFlight::release` clears the identifier's bit without first checking that it is in
+flight. A completion for a command in flight still releases it and passes, but a duplicate
+completion, or one carrying an identifier never minted, is accepted too, so the driver completes a
+command twice or one it never issued, and a later mint can hand the same identifier to two
+commands.
+
+Expected to fail: the harness's `assert!(start.contains(command_id))` in the accepted branch.
+
+diff --git a/src/in_flight.rs b/src/in_flight.rs
+--- a/src/in_flight.rs
++++ b/src/in_flight.rs
+@@ -73,9 +73,6 @@
+     /// Release `command_id`, from an owned completion, so it can be minted again. A
+     /// [`NotInFlightError`] if it is not in flight, with the set unchanged.
+     pub fn release(&mut self, command_id: u16) -> Result<(), NotInFlightError> {
+-        if !self.contains(command_id) {
+-            return Err(NotInFlightError { command_id });
+-        }
+         self.words[usize::from(command_id) / 64] &= !(1 << (command_id % 64));
+         Ok(())
+     }

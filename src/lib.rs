@@ -7,6 +7,7 @@ mod completion;
 mod configuration;
 mod doorbell;
 mod identify;
+mod in_flight;
 mod namespace;
 mod physical_region_page;
 mod queues;
@@ -34,6 +35,7 @@ pub use identify::{
     IdentifyController, IdentifyNamespace, logical_block_size_shift, parse_identify_controller,
     parse_identify_namespace,
 };
+pub use in_flight::{InFlight, NotInFlightError};
 pub use namespace::{Direction, Namespace};
 pub use physical_region_page::{PhysicalRegionPagePair, physical_region_page_pair};
 pub use queues::{CompletionQueue, ImpossibleHeadError, SubmissionQueue};

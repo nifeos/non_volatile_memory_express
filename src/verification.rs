@@ -381,6 +381,50 @@ fn completion_status_parts_rebuild_the_status_field() {
     assert_eq!(Completion::is_phase_tag_set(dword_three), completion.phase);
 }
 
+/// Falsification: replayable `falsifications/verification.no_command_identifier_releases_twice.patch`
+/// **No command identifier releases twice, and none is minted while in flight.** For any set of
+/// identifiers in flight and any identifier a completion carries, `release` succeeds exactly when
+/// that identifier is in flight, and then frees it alone, so a second completion for it is
+/// refused; a refused release changes nothing. `mint` hands out an identifier that was free, marks
+/// only that one, and refuses exactly when the set is full. Two words, so that an identifier in
+/// the second word and one beyond the set are both reached.
+#[kani::proof]
+fn no_command_identifier_releases_twice() {
+    let start = InFlight::<2> { words: kani::any() };
+    let command_id: u16 = kani::any();
+
+    let mut in_flight = start;
+    match in_flight.release(command_id) {
+        Ok(()) => {
+            assert!(start.contains(command_id));
+            assert!(!in_flight.contains(command_id));
+            assert_eq!(in_flight.len() + 1, start.len());
+            assert!(in_flight.release(command_id).is_err());
+        }
+        Err(error) => {
+            assert!(!start.contains(command_id));
+            assert_eq!(error.command_id, command_id);
+            assert_eq!(in_flight, start);
+        }
+    }
+
+    let mut in_flight = start;
+    match in_flight.mint() {
+        Some(minted) => {
+            assert!(!start.contains(minted));
+            assert!(in_flight.contains(minted));
+            assert_eq!(in_flight.len(), start.len() + 1);
+            let other: u16 = kani::any();
+            kani::assume(other != minted);
+            assert_eq!(in_flight.contains(other), start.contains(other));
+        }
+        None => {
+            assert_eq!(start.len(), InFlight::<2>::CAPACITY);
+            assert_eq!(in_flight, start);
+        }
+    }
+}
+
 /// Falsification: replayable `falsifications/verification.record_head_accepts_only_a_head_the_controller_can_have_reached.patch`
 /// **No head a controller reports can panic the submission ring or corrupt it.** For any ring
 /// state and any reported head, `record_head` accepts exactly the heads that lie from the recorded

@@ -74,8 +74,8 @@ To run the proofs, install Kani as its
 [installation guide](https://model-checking.github.io/kani/install-guide.html) says:
 `cargo install --locked kani-verifier --version 0.68.0`, then `cargo kani setup` once (it
 downloads a pinned nightly toolchain). Run `cargo kani` from the crate's directory. The harnesses
-pass on Kani 0.68.0; all sixteen take about 30 seconds in total on a laptop-class machine, after
-the setup. To run one, add `--harness <name>`. Sixteen harnesses live in the `verification`
+pass on Kani 0.68.0; all seventeen take about 30 seconds in total on a laptop-class machine, after
+the setup. To run one, add `--harness <name>`. Seventeen harnesses live in the `verification`
 module:
 
 - `submission_push_stays_in_bounds`: a push onto any ring returns a slot inside the ring and leaves
@@ -121,6 +121,9 @@ module:
   type, the retry delay, More and Do Not Retry each lie in the range their width allows. Together
   they rebuild the 15-bit status field. Success is exactly an all-zero field, and the phase read
   from dword 3 alone equals the decoded phase tag.
+- `no_command_identifier_releases_twice`: for any set of identifiers in flight, `InFlight::release`
+  frees an identifier exactly when it is in flight, so a second completion for it is refused.
+  `InFlight::mint` hands out only a free identifier and refuses only when the set is full.
 - `record_head_accepts_only_a_head_the_controller_can_have_reached`: for any ring state and any
   head a controller reports, `SubmissionQueue::record_head` records the head only when it lies from
   the recorded head forward, round the ring, to the tail. Any other head returns
@@ -194,10 +197,12 @@ issue the commands themselves, and Redox `nvmed` is a driver service of its own.
 of those. It builds one command at a time and walks one ring pair, as pure logic with no I/O, no
 allocator, no `unsafe` and no dependency, so it compiles for any target and the model checker
 reaches all of it. It checks what the controller hands back instead of trusting it: a submission
-queue head the controller cannot have reached is an error, not a recorded value.
+queue head the controller cannot have reached is an error, not a recorded value. So is a
+completion for a command identifier `InFlight` does not hold, which stands in for the tag set.
 
 What that costs you: you write the volatile register accessors, the direct memory access
-allocation, the admin bring-up sequence, the command identifier tracking and every wait. A transfer
+allocation, the admin bring-up sequence and every wait, and you mint and release each command
+identifier yourself, on push and on its completion. A transfer
 longer than two pages has no PRP list to carry it. The crate gives the shutdown values
 (`shutdown_controller_configuration` and the two `CONTROLLER_STATUS_SHUTDOWN_*` bits), and the
 driver writes the one and waits for the other before it removes power.
