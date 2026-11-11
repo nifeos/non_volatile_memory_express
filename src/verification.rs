@@ -341,11 +341,11 @@ fn completion_status_parts_rebuild_the_status_field() {
     let rebuilt = u16::from(completion.status_code())
         | u16::from(completion.status_code_type()) << 8
         | u16::from(completion.command_retry_delay()) << 11
-        | u16::from(completion.more()) << 13
-        | u16::from(completion.do_not_retry()) << 14;
+        | u16::from(completion.is_more_set()) << 13
+        | u16::from(completion.is_do_not_retry_set()) << 14;
     assert_eq!(rebuilt, completion.status);
     assert_eq!(completion.is_success(), dword_three >> 17 == 0);
-    assert_eq!(Completion::phase_of(dword_three), completion.phase);
+    assert_eq!(Completion::is_phase_tag_set(dword_three), completion.phase);
 }
 
 /// Falsification: replayable `falsifications/verification.record_head_accepts_only_a_head_the_controller_can_have_reached.patch`

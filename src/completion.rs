@@ -22,8 +22,8 @@ pub struct Completion {
     pub phase: bool,
     /// The 15-bit status field (`SF`), dword 3 bits 17 to 31; 0 is success. The methods
     /// [`Completion::is_success`], [`Completion::status_code`], [`Completion::status_code_type`],
-    /// [`Completion::command_retry_delay`], [`Completion::more`] and [`Completion::do_not_retry`]
-    /// read its parts.
+    /// [`Completion::command_retry_delay`], [`Completion::is_more_set`] and
+    /// [`Completion::is_do_not_retry_set`] read its parts.
     #[doc(alias = "SF")]
     pub status: u16,
 }
@@ -47,17 +47,19 @@ impl Completion {
             submission_queue_head: dwords[2] as u16,
             submission_queue_id: (dwords[2] >> 16) as u16,
             command_id: dwords[3] as u16,
-            phase: Self::phase_of(dwords[3]),
+            phase: Self::is_phase_tag_set(dwords[3]),
             status: (dwords[3] >> 17) as u16,
         }
     }
 
-    /// The phase tag (`P`, bit 16) of a completion entry's dword 3, read before the rest of the
-    /// entry. A driver polls dword 3 alone, compares this with
-    /// [`crate::CompletionQueue::expected_phase`], and reads dwords 0 to 2 only after they match
-    /// and a read barrier, so a fresh phase never pairs with a stale head or command identifier.
+    /// True when the phase tag (`P`, bit 16) of a completion entry's dword 3 is set, read before
+    /// the rest of the entry. A driver polls dword 3 alone, compares this with
+    /// [`crate::CompletionQueue::expects_phase_tag_set`], and reads dwords 0 to 2 only after they
+    /// match and a read barrier, so a fresh phase never pairs with a stale head or command
+    /// identifier.
     #[doc(alias = "P")]
-    pub fn phase_of(dword_three: u32) -> bool {
+    #[doc(alias = "phase tag")]
+    pub fn is_phase_tag_set(dword_three: u32) -> bool {
         dword_three & (1 << 16) != 0
     }
 
@@ -90,17 +92,20 @@ impl Completion {
         (self.status >> 11) as u8 & 0x3
     }
 
-    /// More (`M`, status field bit 13, dword 3 bit 30): the controller holds more status
-    /// information for this command in its Error Information log page.
+    /// True when More (`M`, status field bit 13, dword 3 bit 30) is set: the controller holds more
+    /// status information for this command in its Error Information log page.
     #[doc(alias = "M")]
-    pub fn more(&self) -> bool {
+    #[doc(alias = "More")]
+    pub fn is_more_set(&self) -> bool {
         self.status & (1 << 13) != 0
     }
 
-    /// Do Not Retry (`DNR`, status field bit 14, dword 3 bit 31): the controller says the same
-    /// command would fail again, so the driver reports the failure instead of resubmitting.
+    /// True when Do Not Retry (`DNR`, status field bit 14, dword 3 bit 31) is set: the controller
+    /// says the same command would fail again, so the driver reports the failure instead of
+    /// resubmitting.
     #[doc(alias = "DNR")]
-    pub fn do_not_retry(&self) -> bool {
+    #[doc(alias = "Do Not Retry")]
+    pub fn is_do_not_retry_set(&self) -> bool {
         self.status & (1 << 14) != 0
     }
 }
@@ -150,8 +155,8 @@ mod tests {
                 completion.status_code(),
                 completion.status_code_type(),
                 completion.command_retry_delay(),
-                completion.more(),
-                completion.do_not_retry(),
+                completion.is_more_set(),
+                completion.is_do_not_retry_set(),
             )
         };
         assert_eq!(parts(0), (true, 0, 0, 0, false, false));
@@ -168,9 +173,9 @@ mod tests {
 
     #[test]
     fn the_phase_of_dword_three_is_bit_16_alone() {
-        assert!(Completion::phase_of(1 << 16));
-        assert!(!Completion::phase_of(!(1 << 16)));
-        assert!(Completion::phase_of(u32::MAX));
-        assert!(!Completion::phase_of(0));
+        assert!(Completion::is_phase_tag_set(1 << 16));
+        assert!(!Completion::is_phase_tag_set(!(1 << 16)));
+        assert!(Completion::is_phase_tag_set(u32::MAX));
+        assert!(!Completion::is_phase_tag_set(0));
     }
 }

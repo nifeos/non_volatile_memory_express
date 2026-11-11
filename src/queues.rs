@@ -191,10 +191,10 @@ impl CompletionQueue {
         self.head
     }
 
-    /// The phase tag a fresh entry carries on this lap: true on the first lap, flipped at every
-    /// wrap. Compare it with [`Completion::phase_of`] on dword 3 before reading the rest of the
-    /// entry.
-    pub fn expected_phase(&self) -> bool {
+    /// True when a fresh entry on this lap carries its phase tag set: true on the first lap,
+    /// flipped at every wrap. Compare it with [`Completion::is_phase_tag_set`] on dword 3 before
+    /// reading the rest of the entry.
+    pub fn expects_phase_tag_set(&self) -> bool {
         self.phase
     }
 
@@ -207,8 +207,8 @@ impl CompletionQueue {
     /// flight.
     ///
     /// On a weakly ordered host, the caller reads dword 3 of the slot first and tests its phase
-    /// bit (bit 16), with [`Completion::phase_of`] against [`CompletionQueue::expected_phase`].
-    /// Only after it matches does the caller issue a read barrier and read dwords 0 to 2; reading
+    /// bit (bit 16), with [`Completion::is_phase_tag_set`] against
+    /// [`CompletionQueue::expects_phase_tag_set`]. Only after it matches does the caller issue a read barrier and read dwords 0 to 2; reading
     /// all four before the test can pair a fresh phase with a stale head and command identifier.
     pub fn is_owned(&self, completion: &Completion) -> bool {
         completion.phase == self.phase
@@ -251,10 +251,10 @@ mod tests {
     fn the_expected_phase_starts_true_and_agrees_with_is_owned_on_every_lap() {
         let mut queue = CompletionQueue::new(2);
         for lap in 0..4 {
-            assert_eq!(queue.expected_phase(), lap % 2 == 0, "lap {lap}");
+            assert_eq!(queue.expects_phase_tag_set(), lap % 2 == 0, "lap {lap}");
             for dword_three in [0, 1 << 16] {
                 assert_eq!(
-                    Completion::phase_of(dword_three) == queue.expected_phase(),
+                    Completion::is_phase_tag_set(dword_three) == queue.expects_phase_tag_set(),
                     queue.is_owned(&Completion::from_dwords([0, 0, 0, dword_three]))
                 );
             }
