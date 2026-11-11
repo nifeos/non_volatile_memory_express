@@ -1,6 +1,6 @@
 [package]
 name = "non_volatile_memory_express"
-version = "0.1.0"
+version = "0.1.0-pre.1"
 edition = "2024"
 rust-version = "1.88"
 description = "NVMe queue mechanics as pure logic: command building, ring arithmetic, doorbells, PRP pairs and identify parsing, proven with Kani"
