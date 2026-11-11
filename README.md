@@ -98,8 +98,8 @@ module:
   namespace parse, and every accepted LBA shift lies between 9 and 12, so a 4 KiB transfer covers
   1 to 8 logical blocks.
 - `identify_controller_parse_is_total_and_reads_its_bytes`: no controller response panics the
-  Identify Controller parse, every answer of 520 bytes or more is accepted with the transfer limit
-  read from byte 77 and the namespace count from bytes 516 to 519, and the limit in bytes is the
+  Identify Controller parse. Every answer of 520 bytes or more is accepted, with the transfer limit
+  read from byte 77 and the namespace count from bytes 516 to 519. The limit in bytes is the
   minimum page shifted by the exponent, or `u64::MAX` when there is none or it does not fit.
 - `capabilities_decode_is_total_and_reads_the_specified_bits`: for any value of the capabilities
   register, every `Capabilities` field lies in the range its width allows and equals the bits at
@@ -118,11 +118,11 @@ module:
   identifier, the phase tag and the 15-bit status field rebuild dword 3 exactly, so the decode
   loses no bit, doubles none and reads none from the wrong place.
 - `completion_status_parts_rebuild_the_status_field`: for any dword 3, the status code, the code
-  type, the retry delay, More and Do Not Retry each lie in the range their width allows and
-  together rebuild the 15-bit status field; success is exactly an all-zero field, and the phase
-  read from dword 3 alone equals the decoded phase tag.
+  type, the retry delay, More and Do Not Retry each lie in the range their width allows. Together
+  they rebuild the 15-bit status field. Success is exactly an all-zero field, and the phase read
+  from dword 3 alone equals the decoded phase tag.
 - `no_command_identifier_releases_twice`: for any set of identifiers in flight, `InFlight::release`
-  frees an identifier exactly when it is in flight, so a second completion for it is refused, and
+  frees an identifier exactly when it is in flight, so a second completion for it is refused.
   `InFlight::mint` hands out only a free identifier and refuses only when the set is full.
 - `record_head_accepts_only_a_head_the_controller_can_have_reached`: for any ring state and any
   head a controller reports, `SubmissionQueue::record_head` records the head only when it lies from
@@ -169,9 +169,9 @@ identifier.
   `None`.
 - `parse_identify_namespace` refuses LBA formats outside 512 bytes to 4 KiB per block.
   `logical_block_size_shift` reports the shift it refused.
-- Not proven: the meaning of a status code within its code type (the proofs place each part of
-  the status field at its bits, and the crate names only the generic code type and two of its
-  codes), and anything in time, which belongs to the caller.
+- Not proven: the meaning of a status code within its code type, and anything in time, which
+  belongs to the caller. The proofs place each part of the status field at its bits, and the crate
+  names only the generic code type and two of its codes.
 - Three cargo-fuzz targets in `fuzz/` feed the decoders arbitrary controller bytes.
   `identify_namespace` reads the Identify namespace structure and builds a transfer from it, for
   a 4096-byte unit and for a unit of any size. `completion` decodes completion queue entries,
@@ -197,7 +197,7 @@ issue the commands themselves, and Redox `nvmed` is a driver service of its own.
 of those. It builds one command at a time and walks one ring pair, as pure logic with no I/O, no
 allocator, no `unsafe` and no dependency, so it compiles for any target and the model checker
 reaches all of it. It checks what the controller hands back instead of trusting it: a submission
-queue head the controller cannot have reached is an error, not a recorded value, and so is a
+queue head the controller cannot have reached is an error, not a recorded value. So is a
 completion for a command identifier `InFlight` does not hold, which stands in for the tag set.
 
 What that costs you: you write the volatile register accessors, the direct memory access
