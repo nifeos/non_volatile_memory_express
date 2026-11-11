@@ -49,7 +49,7 @@ assert_eq!(read.0[1], 1);
 // submission queue head 1 (it consumed the command in slot 0) for submission queue 1, and echoes
 // command identifier 1 with status 0.
 let dword_three = 1 | (1 << 16);
-assert_eq!(Completion::phase_of(dword_three), completion_queue.expected_phase());
+assert_eq!(Completion::is_phase_tag_set(dword_three), completion_queue.expects_phase_tag_set());
 let done = Completion::from_dwords([0, 0, 1 | (1 << 16), dword_three]);
 assert!(completion_queue.is_owned(&done)); // the phase tag only
 // Ownership says the entry is fresh, not that it answers a command this driver issued: match the
