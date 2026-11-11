@@ -1,4 +1,4 @@
-Falsifies `non_volatile_memory_express::verification::a_transfer_command_addresses_only_logical_blocks_the_namespace_has`.
+Falsifies `non_volatile_memory_express::verification::a_transfer_command_names_only_logical_blocks_the_namespace_has`.
 
 The defect: `Namespace::transfer_command` computes the starting logical block as if every format
 had 512-byte logical blocks, multiplying the block number by `unit_bytes / 512` instead of by the
