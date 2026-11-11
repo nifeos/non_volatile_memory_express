@@ -1,0 +1,4 @@
+# The proof harnesses compile only under Kani, which already checks them, so the ordinary tests
+# cannot see a mutation there. Excluding the file states that rule as configuration rather than as
+# one ledger line per survivor.
+exclude_globs = ["src/verification.rs"]
