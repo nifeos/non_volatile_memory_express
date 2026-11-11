@@ -89,9 +89,9 @@ module:
   the pair either refuses or covers the transfer; the second entry is zero when one page suffices,
   and otherwise the page boundary right after the base.
 - `a_page_list_names_exactly_the_pages_after_the_first`: a PRP list built for a transfer of three
-  or more pages names each page after the first, page-aligned and in order, ends at the page that
-  holds the transfer's last byte, writes no slot past them and stays inside the list's own page;
-  a refused list, and the list of a one- or two-page transfer, are left unchanged.
+  or more pages names each page after the first, page-aligned and in order. It ends at the page
+  that holds the transfer's last byte, writes no slot past them and stays inside the list's own
+  page. A refused list, and the list of a one- or two-page transfer, are left unchanged.
 - `a_transfer_command_is_only_built_for_a_block_the_namespace_has`: `Namespace::transfer_command`
   builds a command only for a block whose last byte lies inside the namespace, and never overflows
   computing its LBA, for any block number, buffer address and namespace size.
