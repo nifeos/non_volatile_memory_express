@@ -1,12 +1,17 @@
 //! **The Controller Configuration value** that enables the controller for this driver.
 
-/// The `CC` value that enables the controller for this driver's configuration: Enable (`EN`) = 1,
+/// The Controller Configuration (`CC`) value that enables the controller for this driver's configuration: Enable (`EN`) = 1,
 /// I/O Command Set Selected (CSS) = 0 (the NVM command set), Memory Page Size (MPS) = 0 (4 KiB
 /// memory pages, matching the caller's frames), Arbitration Mechanism Selected (AMS) = 0
 /// (round-robin), I/O Submission Queue Entry Size (IOSQES) = 6 (64-byte submission entries),
 /// I/O Completion Queue Entry Size (IOCQES) = 4 (16-byte completion entries).
 /// The entry sizes are the specification's only defined ones and the controller checks them before
 /// honoring a queue creation, which is why they are set here rather than defaulted.
+#[doc(alias = "CC")]
+#[doc(alias = "CC.EN")]
+#[doc(alias = "MPS")]
+#[doc(alias = "IOSQES")]
+#[doc(alias = "IOCQES")]
 pub fn enabled_controller_configuration() -> u32 {
     1 | (6 << 16) | (4 << 20)
 }

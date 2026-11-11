@@ -46,10 +46,14 @@ pub fn logical_block_format_size_shift(data: &[u8]) -> Option<u8> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct IdentifyNamespace {
-    /// The namespace's size in logical blocks.
+    /// The namespace's size in logical blocks, the Namespace Size (`NSZE`).
+    #[doc(alias = "NSZE")]
     pub blocks: u64,
     /// `1 << logical_block_size_shift` bytes per logical block; between 9 and 12 by construction.
-    /// The specification calls this exponent the LBA Data Size (`LBADS`).
+    /// The specification calls this exponent the LBA Data Size (`LBADS`) of the format that
+    /// Formatted LBA Size (`FLBAS`) selects.
+    #[doc(alias = "LBADS")]
+    #[doc(alias = "FLBAS")]
     pub logical_block_size_shift: u32,
 }
 
