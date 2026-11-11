@@ -111,7 +111,7 @@ impl IdentifyNamespace {
 pub fn parse_identify_controller(data: &[u8]) -> Option<IdentifyController> {
     let number_of_namespaces = data.get(516..520)?;
     Some(IdentifyController {
-        maximum_data_transfer_size_exponent: data[77],
+        maximum_data_transfer_size_shift: data[77],
         maximum_namespace_id: u32::from_le_bytes(number_of_namespaces.try_into().ok()?),
     })
 }
@@ -122,11 +122,11 @@ pub fn parse_identify_controller(data: &[u8]) -> Option<IdentifyController> {
 #[non_exhaustive]
 pub struct IdentifyController {
     /// The Maximum Data Transfer Size (`MDTS`) as the controller wrote it: a transfer may span at
-    /// most `2^maximum_data_transfer_size_exponent` pages of the controller's minimum page size,
+    /// most `2^maximum_data_transfer_size_shift` pages of the controller's minimum page size,
     /// and 0 means the controller states no limit. Read it in bytes with
     /// [`IdentifyController::maximum_data_transfer_bytes`].
     #[doc(alias = "MDTS")]
-    pub maximum_data_transfer_size_exponent: u8,
+    pub maximum_data_transfer_size_shift: u8,
     /// The Number of Namespaces (`NN`): the largest namespace identifier valid on this controller.
     /// Not every identifier from 1 to it need be active; the
     /// [`crate::CONTROLLER_OR_NAMESPACE_STRUCTURE_ACTIVE_NAMESPACE_LIST`] selector lists the ones
@@ -143,7 +143,7 @@ impl IdentifyController {
     /// or list could otherwise describe.
     #[doc(alias = "MDTS")]
     pub fn maximum_data_transfer_bytes(&self, minimum_page_size_bytes: u64) -> u64 {
-        match self.maximum_data_transfer_size_exponent {
+        match self.maximum_data_transfer_size_shift {
             0 => u64::MAX,
             exponent => 1u64.checked_shl(exponent.into()).map_or(u64::MAX, |pages| {
                 pages.saturating_mul(minimum_page_size_bytes)
@@ -309,7 +309,7 @@ mod tests {
         data[516..520].copy_from_slice(&0x0102_0304u32.to_le_bytes());
         data[520] = 0xff;
         let controller = parse_identify_controller(&data).unwrap();
-        assert_eq!(controller.maximum_data_transfer_size_exponent, 3);
+        assert_eq!(controller.maximum_data_transfer_size_shift, 3);
         assert_eq!(controller.maximum_namespace_id, 0x0102_0304);
         assert_eq!(parse_identify_controller(&data[..520]), Some(controller));
         assert_eq!(parse_identify_controller(&data[..519]), None, "truncated");
@@ -321,7 +321,7 @@ mod tests {
     #[test]
     fn the_transfer_limit_is_a_power_of_two_of_minimum_pages_and_0_is_unlimited() {
         let controller = |exponent| IdentifyController {
-            maximum_data_transfer_size_exponent: exponent,
+            maximum_data_transfer_size_shift: exponent,
             maximum_namespace_id: 1,
         };
         assert_eq!(controller(0).maximum_data_transfer_bytes(4096), u64::MAX);
