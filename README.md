@@ -67,8 +67,9 @@ To run the proofs, install Kani as its
 [installation guide](https://model-checking.github.io/kani/install-guide.html) says:
 `cargo install --locked kani-verifier --version 0.68.0`, then `cargo kani setup` once (it
 downloads a pinned nightly toolchain). Run `cargo kani` from the crate's directory. The harnesses
-pass on Kani 0.68.0; all twelve take about 30 seconds in total on a laptop-class machine, after
-the setup. To run one, add `--harness <name>`. Twelve harnesses live in the `verification` module:
+pass on Kani 0.68.0; all thirteen take about 30 seconds in total on a laptop-class machine, after
+the setup. To run one, add `--harness <name>`. Thirteen harnesses live in the `verification`
+module:
 
 - `submission_push_stays_in_bounds`: a push onto any ring returns a slot inside the ring and leaves
   a legal tail, or returns `None` and changes nothing, and it returns `None` exactly when the ring
@@ -96,6 +97,9 @@ the setup. To run one, add `--harness <name>`. Twelve harnesses live in the `ver
   exactly the powers of two from 4 KiB to 128 MiB, encodes each so that its Memory Page Size field
   decodes back to the same size, and accepts every minimum and maximum a capabilities register
   can name.
+- `a_shutdown_notification_changes_only_its_field`: for any configuration word,
+  `shutdown_controller_configuration` leaves the Shutdown Notification field at the normal value
+  01b, whatever it held, and keeps every other bit; the two Shutdown Status bits sit at bits 2:3.
 - `completion_decode_is_total_and_rebuilds_dword_three`: for any four dwords, the command
   identifier, the phase tag and the 15-bit status field rebuild dword 3 exactly, so the decode
   loses no bit, doubles none and reads none from the wrong place.
@@ -175,7 +179,9 @@ queue head the controller cannot have reached is an error, not a recorded value.
 
 What that costs you: you write the volatile register accessors, the direct memory access
 allocation, the admin bring-up sequence, the command identifier tracking and every wait. A transfer
-longer than two pages has no PRP list to carry it.
+longer than two pages has no PRP list to carry it. The crate gives the shutdown values
+(`shutdown_controller_configuration` and the two `CONTROLLER_STATUS_SHUTDOWN_*` bits), and the
+driver writes the one and waits for the other before it removes power.
 
 ## Minimum Rust version
 

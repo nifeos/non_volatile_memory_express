@@ -1,4 +1,5 @@
-//! **The Controller Configuration value** that enables the controller for this driver.
+//! **The Controller Configuration values** that enable the controller for this driver and ask it to
+//! shut down cleanly.
 
 /// The Controller Configuration (`CC`) value that enables the controller with memory pages of
 /// `page_size_bytes`: Enable (`EN`) = 1, I/O Command Set Selected (CSS) = 0 (the NVM command set),
@@ -45,6 +46,30 @@ pub fn enabled_controller_configuration(page_size_bytes: u64) -> Option<u32> {
 #[allow(clippy::assertions_on_constants, clippy::eq_op, dead_code)]
 const CONTROLLER_CONFIGURATION_FIELDS_DO_NOT_OVERLAP: () =
     assert!(1 + (0xf << 7) + (6 << 16) + (4 << 20) == 0x0046_0781);
+
+/// The Controller Configuration (`CC`) value that asks a running controller for a normal shutdown:
+/// `configuration`, the value the driver last wrote, with Shutdown Notification (`SHN`, bits 14:15)
+/// set to 01b and every other bit kept. Enable stays set; the specification asks the host to
+/// notify the controller first and clear the enable bit only once Controller Status reports
+/// [`crate::CONTROLLER_STATUS_SHUTDOWN_COMPLETE`], or after the shutdown time it allows has passed.
+/// A controller with a volatile write cache flushes it before it reports completion, which is the
+/// point of the notification: a drive powered off without it may lose what it acknowledged.
+///
+/// # Examples
+///
+/// ```
+/// use non_volatile_memory_express::{
+///     enabled_controller_configuration, shutdown_controller_configuration,
+/// };
+///
+/// let running = enabled_controller_configuration(4096).unwrap();
+/// assert_eq!(shutdown_controller_configuration(running), 0x0046_4001);
+/// ```
+#[doc(alias = "CC.SHN")]
+#[doc(alias = "SHN")]
+pub fn shutdown_controller_configuration(configuration: u32) -> u32 {
+    (configuration & !(0b11 << 14)) | 0b01 << 14
+}
 
 #[cfg(test)]
 mod tests {
@@ -93,6 +118,24 @@ mod tests {
             for second in &fields[index + 1..] {
                 assert_eq!(first & second, 0);
             }
+        }
+    }
+
+    /// A normal shutdown notification writes 01b into bits 14:15 whatever they held, including an
+    /// abrupt notification (10b) left by an earlier write, and keeps every other bit.
+    #[test]
+    fn the_shutdown_notification_is_01b_in_bits_14_and_15_and_nothing_else_moves() {
+        for configuration in [
+            0,
+            0x0046_0001,
+            0x0046_8001,
+            0x0046_c001,
+            u32::MAX,
+            0x5555_5555,
+        ] {
+            let shutdown = shutdown_controller_configuration(configuration);
+            assert_eq!((shutdown >> 14) & 0b11, 0b01, "{configuration:#x}");
+            assert_eq!(shutdown & !(0b11 << 14), configuration & !(0b11 << 14));
         }
     }
 }
