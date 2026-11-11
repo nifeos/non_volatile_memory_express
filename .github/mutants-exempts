@@ -9,8 +9,8 @@
 # input can tell the mutant apart, and then its line says why.
 #
 # Survivors of the weekly mutation run; a mutant is listed once per line.
-src/command.rs:100 # `|` to `^`: the queue identifier fills bits 0:15 and the 0-based size bits 16:31, no shared bit, so the word is the same for every input
-src/command.rs:122 # `|` to `^`: the queue identifier fills bits 0:15 and the 0-based size bits 16:31, no shared bit, so the word is the same for every input
-src/command.rs:123 # `|` to `^`: physically contiguous is bit 0 and the completion queue identifier bits 16:31, no shared bit, so the word is the same for every input
-src/configuration.rs:11 # `|` to `^`: EN, IOSQES and IOCQES share no bit (CONTROLLER_CONFIGURATION_FIELDS_DO_NOT_OVERLAP), so the constant is the same
+src/command.rs:108 # `|` to `^`: the queue identifier fills bits 0:15 and the 0-based size bits 16:31, no shared bit, so the word is the same for every input
+src/command.rs:138 # `|` to `^`: the queue identifier fills bits 0:15 and the 0-based size bits 16:31, no shared bit, so the word is the same for every input
+src/command.rs:139 # `|` to `^`: physically contiguous is bit 0 and the completion queue identifier bits 16:31, no shared bit, so the word is the same for every input
+src/configuration.rs:16 # `|` to `^`: EN, IOSQES and IOCQES share no bit (CONTROLLER_CONFIGURATION_FIELDS_DO_NOT_OVERLAP), so the constant is the same
 src/registers.rs:36 # CONTROLLER_STATUS_READY is `1 << 0`; `1 >> 0` is also 1, so the constant is unchanged

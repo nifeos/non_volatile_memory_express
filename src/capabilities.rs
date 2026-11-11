@@ -6,24 +6,30 @@
 pub struct Capabilities(pub u64);
 
 impl Capabilities {
-    /// Maximum Queue Entries Supported, converted from the register's 0-based field to a count.
-    /// Every queue this driver creates must be no deeper than this.
+    /// Maximum Queue Entries Supported (`CAP.MQES`), converted from the register's 0-based field
+    /// to a count. Every queue this driver creates must be no deeper than this.
+    #[doc(alias = "CAP.MQES")]
+    #[doc(alias = "MQES")]
     pub fn maximum_queue_entries(self) -> u32 {
         (self.0 as u32 & 0xffff) + 1
     }
-    /// Doorbell Stride: doorbell N is at `0x1000 + N * (4 << DSTRD)` (a 4-bit field, so the shift
+    /// Doorbell Stride (`CAP.DSTRD`): doorbell N is at `0x1000 + N * (4 << DSTRD)` (a 4-bit field, so the shift
     /// is at most 19 and the multiply cannot overflow a u64 for any real doorbell index).
+    #[doc(alias = "CAP.DSTRD")]
+    #[doc(alias = "DSTRD")]
     pub fn doorbell_stride(self) -> u32 {
         (self.0 >> 32) as u32 & 0xf
     }
-    /// Timeout for the ready bit to follow the enable bit, in units of 500 milliseconds.
+    /// Timeout (`CAP.TO`) for the ready bit to follow the enable bit, in units of 500 milliseconds.
     #[doc(alias = "CAP.TO")]
     #[doc(alias = "TO")]
     pub fn timeout_in_500_millisecond_units(self) -> u32 {
         (self.0 >> 24) as u32 & 0xff
     }
-    /// Memory Page Size Minimum, as a byte count (the field is `2^(12+MPSMIN)`). This driver runs
+    /// Memory Page Size Minimum (`CAP.MPSMIN`), as a byte count (the field is `2^(12+MPSMIN)`). This driver runs
     /// with `CC.MPS` = 0, i.e. 4 KiB pages, so bring-up checks this is at most 4096.
+    #[doc(alias = "CAP.MPSMIN")]
+    #[doc(alias = "MPSMIN")]
     pub fn minimum_page_size(self) -> u64 {
         1u64 << (12 + ((self.0 >> 48) & 0xf))
     }
