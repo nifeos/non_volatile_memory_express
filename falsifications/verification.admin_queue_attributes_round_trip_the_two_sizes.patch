@@ -1,0 +1,21 @@
+Falsifies `non_volatile_memory_express::verification::admin_queue_attributes_round_trip_the_two_sizes`.
+
+The defect: `admin_queue_attributes` writes the completion count as it stands instead of minus
+one. The submission size still decodes and passes, but the controller reads a completion ring one
+slot deeper than the driver built, so it writes its last entry of each lap past the ring and the
+two sides disagree on where the phase flips.
+
+Expected to fail: the harness's `assert_eq!(((attributes >> 16) & 0xfff) + 1, completion_entries as u32)`.
+
+diff --git a/src/configuration.rs b/src/configuration.rs
+--- a/src/configuration.rs
++++ b/src/configuration.rs
+@@ -102,7 +102,7 @@
+         (2..=4096).contains(&submission_entries) && (2..=4096).contains(&completion_entries),
+         "an admin queue holds 2 to 4096 entries"
+     );
+-    (completion_entries as u32 - 1) << 16 | (submission_entries as u32 - 1)
++    (completion_entries as u32) << 16 | (submission_entries as u32 - 1)
+ }
+ 
+ #[cfg(test)]

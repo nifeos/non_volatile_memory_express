@@ -10,7 +10,7 @@ Expected to fail: the harness's `assert_eq!(1u64 << (12 + ((configuration >> 7) 
 diff --git a/src/configuration.rs b/src/configuration.rs
 --- a/src/configuration.rs
 +++ b/src/configuration.rs
-@@ -35,7 +35,7 @@
+@@ -37,7 +37,7 @@
          return None;
      }
      let memory_page_size = page_size_bytes.trailing_zeros() - 12;

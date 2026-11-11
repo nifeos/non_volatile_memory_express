@@ -22,7 +22,9 @@ pub use command::{
     Command, NON_VOLATILE_MEMORY_FLUSH, NON_VOLATILE_MEMORY_READ, NON_VOLATILE_MEMORY_WRITE,
 };
 pub use completion::Completion;
-pub use configuration::{enabled_controller_configuration, shutdown_controller_configuration};
+pub use configuration::{
+    admin_queue_attributes, enabled_controller_configuration, shutdown_controller_configuration,
+};
 pub use doorbell::{Doorbell, doorbell};
 pub use identify::{IdentifyNamespace, logical_block_size_shift, parse_identify_namespace};
 pub use namespace::{Direction, Namespace};

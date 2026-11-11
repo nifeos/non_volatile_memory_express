@@ -23,9 +23,13 @@ A block is the unit of storage a controller exposes.
 
 ```rust
 use non_volatile_memory_express::{
-    Command, Completion, CompletionQueue, Doorbell, SubmissionQueue, doorbell,
-    physical_region_page_pair,
+    Command, Completion, CompletionQueue, Doorbell, SubmissionQueue, admin_queue_attributes,
+    doorbell, physical_region_page_pair,
 };
+
+// Bring-up writes the admin ring sizes to the Admin Queue Attributes register before it enables
+// the controller; the driver's own admin rings use the same counts.
+assert_eq!(admin_queue_attributes(32, 32), 0x001f_001f);
 
 let mut submission_queue = SubmissionQueue::new(64);
 let mut completion_queue = CompletionQueue::new(64);
@@ -67,8 +71,8 @@ To run the proofs, install Kani as its
 [installation guide](https://model-checking.github.io/kani/install-guide.html) says:
 `cargo install --locked kani-verifier --version 0.68.0`, then `cargo kani setup` once (it
 downloads a pinned nightly toolchain). Run `cargo kani` from the crate's directory. The harnesses
-pass on Kani 0.68.0; all thirteen take about 30 seconds in total on a laptop-class machine, after
-the setup. To run one, add `--harness <name>`. Thirteen harnesses live in the `verification`
+pass on Kani 0.68.0; all fourteen take about 30 seconds in total on a laptop-class machine, after
+the setup. To run one, add `--harness <name>`. Fourteen harnesses live in the `verification`
 module:
 
 - `submission_push_stays_in_bounds`: a push onto any ring returns a slot inside the ring and leaves
@@ -97,6 +101,9 @@ module:
   exactly the powers of two from 4 KiB to 128 MiB, encodes each so that its Memory Page Size field
   decodes back to the same size, and accepts every minimum and maximum a capabilities register
   can name.
+- `admin_queue_attributes_round_trip_the_two_sizes`: for any two counts from 2 to 4096,
+  `admin_queue_attributes` packs each 0-based into its own 12-bit field, so both decode back to
+  the counts asked for, and it sets no reserved bit.
 - `a_shutdown_notification_changes_only_its_field`: for any configuration word,
   `shutdown_controller_configuration` leaves the Shutdown Notification field at the normal value
   01b, whatever it held, and keeps every other bit; the two Shutdown Status bits sit at bits 2:3.
