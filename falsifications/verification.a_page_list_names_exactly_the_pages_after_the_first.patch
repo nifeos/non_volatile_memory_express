@@ -1,0 +1,21 @@
+Falsifies `non_volatile_memory_express::verification::a_page_list_names_exactly_the_pages_after_the_first`.
+
+The defect: `physical_region_page_list` counts one entry per page of the transfer, the first
+included, where PRP1 already names the first page. The list then carries one page past the end of
+the transfer, which the controller is told it may read or write, and a list that exactly fills its
+page is refused.
+
+Expected to fail: the harness's `assert_eq!(entry, old)` for the slot after the last entry.
+
+diff --git a/src/physical_region_page.rs b/src/physical_region_page.rs
+--- a/src/physical_region_page.rs
++++ b/src/physical_region_page.rs
+@@ -134,7 +134,7 @@
+         return physical_region_page_pair(base_physical_address, length_bytes, page_size_bytes);
+     }
+     // Every page after the first takes one entry, and the entries must stay in the list's page.
+-    let entries = pages - 1;
++    let entries = pages;
+     let room = (page_size_bytes - (list_physical_address & (page_size_bytes - 1))) / 8;
+     if list_physical_address % 8 != 0 || entries > room || entries > list.len() as u64 {
+         return None;

@@ -37,7 +37,9 @@ pub use identify::{
 };
 pub use in_flight::{InFlight, NotInFlightError};
 pub use namespace::{Direction, Namespace};
-pub use physical_region_page::{PhysicalRegionPagePair, physical_region_page_pair};
+pub use physical_region_page::{
+    PhysicalRegionPagePair, physical_region_page_list, physical_region_page_pair,
+};
 pub use queues::{CompletionQueue, ImpossibleHeadError, SubmissionQueue};
 pub use registers::{
     CONTROLLER_STATUS_FATAL, CONTROLLER_STATUS_READY, CONTROLLER_STATUS_SHUTDOWN_COMPLETE,

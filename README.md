@@ -16,8 +16,8 @@ memory and the timing (reset, enable, timeouts). The crate computes every value 
 checks every value the controller hands back.
 
 A PRP entry is a physical address of one page of a transfer's data. A command carries two of them,
-PRP1 and PRP2. A longer transfer points PRP2 at a list of more entries, which this crate does not
-build. A logical block address (LBA) numbers the fixed-size blocks of a namespace, counting from 0.
+PRP1 and PRP2. A longer transfer points PRP2 at a list of more entries, which
+`physical_region_page_list` builds. A logical block address (LBA) numbers the fixed-size blocks of a namespace, counting from 0.
 A block is the unit of storage a controller exposes.
 
 ## EXAMPLES
@@ -74,8 +74,8 @@ To run the proofs, install Kani as its
 [installation guide](https://model-checking.github.io/kani/install-guide.html) says:
 `cargo install --locked kani-verifier --version 0.68.0`, then `cargo kani setup` once (it
 downloads a pinned nightly toolchain). Run `cargo kani` from the crate's directory. The harnesses
-pass on Kani 0.68.0; all seventeen take about 30 seconds in total on a laptop-class machine, after
-the setup. To run one, add `--harness <name>`. Seventeen harnesses live in the `verification`
+pass on Kani 0.68.0; all eighteen take about 50 seconds in total on a laptop-class machine, after
+the setup. To run one, add `--harness <name>`. Eighteen harnesses live in the `verification`
 module:
 
 - `submission_push_stays_in_bounds`: a push onto any ring returns a slot inside the ring and leaves
@@ -88,6 +88,10 @@ module:
 - `physical_region_page_pair_is_total_and_page_disciplined`: for any base, length and page size,
   the pair either refuses or covers the transfer; the second entry is zero when one page suffices,
   and otherwise the page boundary right after the base.
+- `a_page_list_names_exactly_the_pages_after_the_first`: a PRP list built for a transfer of three
+  or more pages names each page after the first, page-aligned and in order. It ends at the page
+  that holds the transfer's last byte, writes no slot past them and stays inside the list's own
+  page. A refused list, and the list of a one- or two-page transfer, are left unchanged.
 - `a_transfer_command_is_only_built_for_a_block_the_namespace_has`: `Namespace::transfer_command`
   builds a command only for a block whose last byte lies inside the namespace, and never overflows
   computing its LBA, for any block number, buffer address and namespace size.
@@ -160,13 +164,16 @@ identifier.
   entry with a fresh phase and a command identifier nobody issued passes it, so the caller matches
   `command_id` and `submission_queue_id` against the commands it has in flight.
 - The queue builders `Command::create_io_completion_queue` and
-  `Command::create_io_submission_queue` panic on fewer than two entries, and
-  `physical_region_page_pair` panics on a page size that is not a power of two of at least 512
-  bytes. These are caller mistakes, and no value the controller writes reaches either panic. The
+  `Command::create_io_submission_queue` panic on fewer than two entries, and the two PRP
+  builders, `physical_region_page_pair` and `physical_region_page_list`, panic on a page size that
+  is not a power of two of at least 512 bytes. These are caller mistakes, and no value the
+  controller writes reaches either panic. The
   caller checks the queue depth against `Capabilities::maximum_queue_entries` and keeps queue
   identifier 0, the admin pair, out of the I/O queue builders.
-- `physical_region_page_pair` covers at most two pages. A transfer that needs a PRP list returns
-  `None`.
+- `physical_region_page_pair` covers at most two pages and returns `None` for a longer transfer.
+  `physical_region_page_list` builds the list for one, in a page the caller maps, and returns
+  `None` for a list that would cross into a second list page: a 4 KiB page carries a transfer of
+  up to 513 pages.
 - `parse_identify_namespace` refuses LBA formats outside 512 bytes to 4 KiB per block.
   `logical_block_size_shift` reports the shift it refused.
 - Not proven: the meaning of a status code within its code type, and anything in time, which
@@ -202,8 +209,8 @@ completion for a command identifier `InFlight` does not hold, which stands in fo
 
 What that costs you: you write the volatile register accessors, the direct memory access
 allocation, the admin bring-up sequence and every wait, and you mint and release each command
-identifier yourself, on push and on its completion. A transfer
-longer than two pages has no PRP list to carry it. The crate gives the shutdown values
+identifier yourself, on push and on its completion. A PRP list reaches as far as one list page,
+since the crate does not chain list pages. The crate gives the shutdown values
 (`shutdown_controller_configuration` and the two `CONTROLLER_STATUS_SHUTDOWN_*` bits), and the
 driver writes the one and waits for the other before it removes power.
 

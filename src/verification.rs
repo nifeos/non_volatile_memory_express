@@ -120,6 +120,58 @@ fn physical_region_page_pair_is_total_and_page_disciplined() {
     }
 }
 
+/// Falsification: replayable `falsifications/verification.a_page_list_names_exactly_the_pages_after_the_first.patch`
+/// **A PRP list names exactly the transfer's pages after the first, each page-aligned, and stays
+/// in its own page.** For any base, length, list address and page size up to 4 KiB, and a list of
+/// four slots, `physical_region_page_list` either refuses with the list unchanged, returns the
+/// pair for a transfer of one or two pages with the list unchanged, or points PRP2 at the list and
+/// fills its first slots with the following pages in order: the last named page holds the
+/// transfer's last byte, no slot past them is written, and the entries end inside the list's page.
+#[kani::proof]
+#[kani::unwind(5)]
+fn a_page_list_names_exactly_the_pages_after_the_first() {
+    let base: u64 = kani::any();
+    let length: u64 = kani::any();
+    let list_physical_address: u64 = kani::any();
+    let shift: u32 = kani::any();
+    kani::assume((9..=12).contains(&shift));
+    let page = 1u64 << shift;
+    let before: [u64; 4] = kani::any();
+    let mut list = before;
+    let result = physical_region_page_list(base, length, page, &mut list, list_physical_address);
+    let Some(pair) = result else {
+        assert!(list.iter().zip(before.iter()).all(|(new, old)| new == old));
+        return;
+    };
+    assert_eq!(pair.first_entry, base);
+    let offset = base & (page - 1);
+    let span = offset + length;
+    if span <= 2 * page {
+        assert_eq!(Some(pair), physical_region_page_pair(base, length, page));
+        assert!(list.iter().zip(before.iter()).all(|(new, old)| new == old));
+        return;
+    }
+    assert_eq!(pair.second_entry, list_physical_address);
+    assert_eq!(list_physical_address % 8, 0);
+    let entries = span.div_ceil(page) - 1;
+    assert!(entries <= 4);
+    // The entries end inside the page the list starts in.
+    assert!((list_physical_address & (page - 1)) + 8 * entries <= page);
+    let first_page = base & !(page - 1);
+    for (slot, (&entry, &old)) in list.iter().zip(before.iter()).enumerate() {
+        if (slot as u64) < entries {
+            assert_eq!(entry & (page - 1), 0);
+            assert_eq!(entry, first_page + (slot as u64 + 1) * page);
+        } else {
+            assert_eq!(entry, old);
+        }
+    }
+    // The last named page holds the transfer's last byte, and no byte lies past it.
+    // In 128 bits, since a transfer may end at the top of the address space.
+    let (named, end) = (u128::from(entries * page), u128::from(span));
+    assert!(named < end && end <= named + u128::from(page));
+}
+
 /// Falsification: replayable `falsifications/verification.a_transfer_command_is_only_built_for_a_block_the_namespace_has.patch`
 /// **No transfer command is built for a block outside its namespace, and none overflows
 /// computing one.** This is the bounds check a confined driver leans on: an input-output memory management unit (IOMMU) bounds where
