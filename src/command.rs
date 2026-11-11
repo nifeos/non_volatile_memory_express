@@ -34,6 +34,13 @@ pub const CONTROLLER_OR_NAMESPACE_STRUCTURE_NAMESPACE: u32 = 0x00;
 /// structure, rather than a namespace's.
 #[doc(alias = "CNS")]
 pub const CONTROLLER_OR_NAMESPACE_STRUCTURE_CONTROLLER: u32 = 0x01;
+/// The Identify selector (`CNS`, Controller or Namespace Structure) for the active namespace list:
+/// up to 1024 namespace identifiers, each 4 bytes little-endian, in increasing order, every one
+/// greater than the namespace identifier the command carries (0 asks for the list from the
+/// start), with the unused entries 0. [`crate::IdentifyController::maximum_namespace_id`] bounds
+/// the identifiers it can hold.
+#[doc(alias = "CNS")]
+pub const CONTROLLER_OR_NAMESPACE_STRUCTURE_ACTIVE_NAMESPACE_LIST: u32 = 0x02;
 
 /// One 64-byte submission queue entry, as the sixteen dwords the driver writes. `#[repr(C)]` so a
 /// caller can copy it into the ring as-is; the wire format is little-endian dwords and both target

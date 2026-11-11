@@ -18,6 +18,7 @@ mod verification;
 pub use capabilities::Capabilities;
 pub use command::{
     ADMIN_CREATE_IO_COMPLETION_QUEUE, ADMIN_CREATE_IO_SUBMISSION_QUEUE, ADMIN_IDENTIFY,
+    CONTROLLER_OR_NAMESPACE_STRUCTURE_ACTIVE_NAMESPACE_LIST,
     CONTROLLER_OR_NAMESPACE_STRUCTURE_CONTROLLER, CONTROLLER_OR_NAMESPACE_STRUCTURE_NAMESPACE,
     Command, NON_VOLATILE_MEMORY_FLUSH, NON_VOLATILE_MEMORY_READ, NON_VOLATILE_MEMORY_WRITE,
 };
@@ -29,7 +30,10 @@ pub use configuration::{
     admin_queue_attributes, enabled_controller_configuration, shutdown_controller_configuration,
 };
 pub use doorbell::{Doorbell, doorbell};
-pub use identify::{IdentifyNamespace, logical_block_size_shift, parse_identify_namespace};
+pub use identify::{
+    IdentifyController, IdentifyNamespace, logical_block_size_shift, parse_identify_controller,
+    parse_identify_namespace,
+};
 pub use namespace::{Direction, Namespace};
 pub use physical_region_page::{PhysicalRegionPagePair, physical_region_page_pair};
 pub use queues::{CompletionQueue, ImpossibleHeadError, SubmissionQueue};

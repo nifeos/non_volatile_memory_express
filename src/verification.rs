@@ -195,6 +195,39 @@ fn identify_parse_is_total_and_bounds_the_shift() {
     }
 }
 
+/// Falsification: replayable `falsifications/verification.identify_controller_parse_is_total_and_reads_its_bytes.patch`
+/// **Identify Controller parsing is total for any device response and reads the specified
+/// bytes.** No contents of the structure panic the parse, an answer long enough to reach the
+/// namespace count is always accepted, the transfer limit is byte 77 and the namespace count bytes
+/// 516 to 519 little-endian, and the limit in bytes is the minimum page shifted by the exponent,
+/// never less than one page, or `u64::MAX` when the controller states none or it does not fit.
+#[kani::proof]
+fn identify_controller_parse_is_total_and_reads_its_bytes() {
+    let data: [u8; 520] = kani::any();
+    let length: usize = kani::any();
+    kani::assume(length <= data.len());
+    let parsed = parse_identify_controller(&data[..length]);
+    assert_eq!(parsed.is_some(), length == 520);
+    let Some(controller) = parsed else {
+        return;
+    };
+    assert_eq!(controller.maximum_data_transfer_size_exponent, data[77]);
+    assert_eq!(
+        controller.maximum_namespace_id,
+        u32::from_le_bytes([data[516], data[517], data[518], data[519]])
+    );
+
+    let page_shift: u32 = kani::any();
+    kani::assume((12..=27).contains(&page_shift));
+    let limit = controller.maximum_data_transfer_bytes(1 << page_shift);
+    let exponent = u32::from(data[77]);
+    if exponent == 0 || exponent + page_shift >= 64 {
+        assert_eq!(limit, u64::MAX);
+    } else {
+        assert_eq!(limit, 1 << (exponent + page_shift));
+    }
+}
+
 /// Falsification: replayable `falsifications/verification.capabilities_decode_is_total_and_reads_the_specified_bits.patch`
 /// **The capabilities decoder is total and reads exactly the specification's bit positions**, for
 /// any 64-bit register value a controller may report. Each field lies in the range its width
