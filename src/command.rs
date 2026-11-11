@@ -84,6 +84,13 @@ impl Command {
     /// Create I/O Completion Queue (admin): queue `queue_id`, `entries` deep, physically contiguous
     /// (`PC`=1) at `physical_region_page`. Interrupts stay off (`IEN`=0): the driver completes by
     /// polling the phase tag, so no vector is named and none is needed.
+    ///
+    /// The caller keeps `entries` within [`crate::Capabilities::maximum_queue_entries`] and
+    /// `queue_id` above 0, which names the admin pair; this builder checks neither.
+    ///
+    /// # Panics
+    ///
+    /// On `entries` below 2, the specification's minimum queue size.
     pub fn create_io_completion_queue(
         command_id: u16,
         queue_id: u16,
@@ -97,6 +104,7 @@ impl Command {
             physical_region_page,
             0,
         );
+        assert!(entries >= 2, "an I/O queue holds at least two entries");
         command.0[10] = queue_id as u32 | ((entries as u32 - 1) << 16);
         command.0[11] = 1; // PC only; IEN=0
         command
@@ -105,6 +113,13 @@ impl Command {
     /// Create I/O Submission Queue (admin): queue `queue_id`, `entries` deep, physically contiguous at
     /// `physical_region_page`, completing into completion queue `completion_queue_id` (which must already exist,
     /// so the pair is created completion queue first).
+    ///
+    /// The caller keeps `entries` within [`crate::Capabilities::maximum_queue_entries`] and
+    /// `queue_id` above 0, which names the admin pair; this builder checks neither.
+    ///
+    /// # Panics
+    ///
+    /// On `entries` below 2, the specification's minimum queue size.
     pub fn create_io_submission_queue(
         command_id: u16,
         queue_id: u16,
@@ -119,6 +134,7 @@ impl Command {
             physical_region_page,
             0,
         );
+        assert!(entries >= 2, "an I/O queue holds at least two entries");
         command.0[10] = queue_id as u32 | ((entries as u32 - 1) << 16);
         command.0[11] = 1 | (completion_queue_id as u32) << 16; // physically contiguous, and the paired completion queue
         command
@@ -316,6 +332,32 @@ mod tests {
             1 | 3 << 16,
             "physically contiguous, and the paired completion queue id"
         );
+    }
+
+    /// Two entries is the smallest queue the specification allows, and the builders accept it:
+    /// the 0-based size field then reads 1.
+    #[test]
+    fn queue_creation_accepts_the_two_entry_minimum() {
+        assert_eq!(
+            Command::create_io_completion_queue(1, 1, 2, 0x2000).0[10],
+            1 | 1 << 16
+        );
+        assert_eq!(
+            Command::create_io_submission_queue(1, 1, 2, 1, 0x3000).0[10],
+            1 | 1 << 16
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "an I/O queue holds at least two entries")]
+    fn a_one_entry_completion_queue_is_refused() {
+        Command::create_io_completion_queue(1, 1, 1, 0x2000);
+    }
+
+    #[test]
+    #[should_panic(expected = "an I/O queue holds at least two entries")]
+    fn a_zero_entry_submission_queue_is_refused_rather_than_overflowing() {
+        Command::create_io_submission_queue(1, 1, 0, 1, 0x3000);
     }
 
     #[test]
