@@ -11,8 +11,17 @@ keywords = ["no-std", "nvme", "storage", "kani", "driver"]
 categories = ["no-std", "embedded", "hardware-support"]
 publish = false     # held until the maintainers decide the first release
 # What a user of the crate needs: the source, the falsification patches that make each proof fail,
-# and the documents. The continuous integration files stay in the repository.
-include = ["src/**", "falsifications/**", "README.md", "CHANGELOG.md", "LICENSE-*", "Cargo.toml"]
+# the example a user copies as a test double, and the documents. The continuous integration files
+# stay in the repository.
+include = [
+    "src/**",
+    "falsifications/**",
+    "examples/**",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE-*",
+    "Cargo.toml",
+]
 
 # no_std for an operating system kernel, std for host tests. The crate owns the NVMe queue
 # mechanics only (register field decode, command building, submission and completion ring
@@ -20,6 +29,12 @@ include = ["src/**", "falsifications/**", "README.md", "CHANGELOG.md", "LICENSE-
 # parsing); the caller supplies the volatile memory-mapped input/output accessors and the direct
 # memory access memory, so all of this tests on the host in milliseconds and is reachable by the
 # model checker.
+
+# `cargo test` runs the example's test as well as building it, so the whole loop runs in every
+# test job.
+[[example]]
+name = "software_controller"
+test = true
 
 [lints.rust]
 # `cfg(kani)` is set by the Kani model checker, which proves this crate's harnesses.

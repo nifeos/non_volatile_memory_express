@@ -64,6 +64,12 @@ submission_queue
 assert_eq!(completion_queue.pop(), 1);
 ```
 
+`examples/software_controller.rs` runs the whole loop against a controller modeled over two
+`Vec`s: it drives both rings through three laps, checks each identifier with `InFlight` and each
+reported head, and refuses one impossible head at the end. `cargo test` runs it, and
+`cargo run --example software_controller` prints the heads. Copy its `SoftwareController` as a test
+double.
+
 ## What is proven
 
 To build and test, install Rust 1.85 or newer (for example with `rustup`), then run `cargo build`
