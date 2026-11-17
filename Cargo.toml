@@ -13,14 +13,17 @@ publish = false     # held until the maintainers decide the first release
 # What a user of the crate needs: the source, the falsification patches that make each proof fail,
 # the example a user copies as a test double, and the documents. The continuous integration files
 # stay in the repository.
+# Each pattern is anchored at the package root: an unanchored name also matches the template
+# checkout the release workflow places in `.crate-workflows/`, which `cargo package` then refuses
+# as uncommitted files.
 include = [
-    "src/**",
-    "falsifications/**",
-    "examples/**",
-    "README.md",
-    "CHANGELOG.md",
-    "LICENSE-*",
-    "Cargo.toml",
+    "/src/**",
+    "/falsifications/**",
+    "/examples/**",
+    "/README.md",
+    "/CHANGELOG.md",
+    "/LICENSE-*",
+    "/Cargo.toml",
 ]
 
 # no_std for an operating system kernel, std for host tests. The crate owns the NVMe queue
