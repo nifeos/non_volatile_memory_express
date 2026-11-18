@@ -22,6 +22,10 @@ A block is the unit of storage a controller exposes.
 
 ## EXAMPLES
 
+To build and test, install Rust 1.85 or newer (for example with `rustup`), then run `cargo build`
+and `cargo test` from the crate's directory. The test run also compiles the example below as a
+documentation test.
+
 ```rust
 use non_volatile_memory_express::{
     Command, Completion, CompletionQueue, Doorbell, SubmissionQueue, admin_queue_attributes,
@@ -37,9 +41,11 @@ let mut completion_queue = CompletionQueue::new(64);
 
 // Read eight 512-byte blocks from LBA 0 of namespace 1 into a buffer that straddles a page.
 let pages = physical_region_page_pair(0x4000_0800, 4096, 4096).expect("two pages suffice");
+// Command identifier 1, namespace 1, starting logical block 0, eight blocks.
 let read = Command::read(1, 1, 0, 8, pages);
 // Write `read.0` into submission slot `slot`, issue a write barrier, then ring the tail:
 let slot = submission_queue.push().expect("the ring has room");
+// The third argument is the raw `CAP.DSTRD` field, `Capabilities::doorbell_stride`, not bytes.
 assert_eq!(doorbell(1, Doorbell::SubmissionTail, 0), 0x1008); // write the tail here
 assert_eq!((slot, submission_queue.tail()), (0, 1));
 assert_eq!(read.0[1], 1);
@@ -70,18 +76,19 @@ reported head, and refuses one impossible head at the end. `cargo test` runs it,
 `cargo run --example software_controller` prints the heads. Copy its `SoftwareController` as a test
 double.
 
-## What is proven
+`examples/qemu_driver.rs` runs the same loop against QEMU's emulated `NVMe` controller, from Linux
+user space: bring-up, Identify, one I/O queue pair, a read, a write, a flush and a clean shutdown.
+It refuses any controller but QEMU's. `docs/stranger-test.md` gives the commands that build it,
+boot it under `qemu-system-x86_64` and check the disk image afterwards.
 
-To build and test, install Rust 1.85 or newer (for example with `rustup`), then run `cargo build`
-and `cargo test` from the crate's directory. The test run also compiles the example above as a
-documentation test.
+## What is proven
 
 To run the proofs, install Kani as its
 [installation guide](https://model-checking.github.io/kani/install-guide.html) says:
 `cargo install --locked kani-verifier --version 0.68.0`, then `cargo kani setup` once (it
 downloads a pinned nightly toolchain). Run `cargo kani` from the crate's directory. The harnesses
-pass on Kani 0.68.0; all eighteen take about 50 seconds in total on a laptop-class machine, after
-the setup. To run one, add `--harness <name>`. Eighteen harnesses live in the `verification`
+pass on Kani 0.68.0; all eighteen take about 75 seconds in total, compile included, after the
+setup. To run one, add `--harness <name>`. Eighteen harnesses live in the `verification`
 module:
 
 - `submission_push_stays_in_bounds`: a push onto any ring returns a slot inside the ring and leaves
@@ -162,6 +169,26 @@ four dwords before the phase test lets the loads of dwords 0 to 2 run ahead of t
 write while dword 3 follows it, and the fresh phase then carries a stale head and command
 identifier.
 
+## Bring-up and shutdown
+
+The crate computes the register values, and the caller writes them in the order the
+specification sets (section 7.6.1). The offsets are in the `registers` module.
+
+1. Clear the enable bit (write 0 to Controller Configuration), then wait for Controller Status to
+   clear `CONTROLLER_STATUS_READY`, for at most `Capabilities::timeout_in_500_millisecond_units`
+   times 500 milliseconds.
+2. Write `admin_queue_attributes` to the Admin Queue Attributes register, then the physical
+   addresses of the admin submission and completion rings to their two base address registers.
+3. Write `enabled_controller_configuration` for a page size between
+   `Capabilities::minimum_page_size_bytes` and `Capabilities::maximum_page_size_bytes`, then wait
+   for `CONTROLLER_STATUS_READY`, giving up on `CONTROLLER_STATUS_FATAL`.
+4. Identify the controller and the namespace, then create each I/O completion queue before the
+   submission queue that completes into it.
+5. To shut down, write `shutdown_controller_configuration` of the value written in step 3, and
+   wait for `CONTROLLER_STATUS_SHUTDOWN_COMPLETE` before removing power.
+
+`examples/qemu_driver.rs` follows these steps against a real controller.
+
 ## BUGS
 
 - `SubmissionQueue` models one ring and keeps no count of commands in flight. `push` returns
@@ -191,7 +218,7 @@ identifier.
   drives a completion ring with them and records each entry's submission queue head.
   `capabilities` decodes the `CAP` register and derives doorbell offsets and page pointers from it.
   Install the runner once with `cargo install cargo-fuzz`, then run one target with
-  `cargo +nightly fuzz run <target>`; the weekly fuzz job runs all three for a bounded time.
+  `cargo +nightly fuzz run <target>`, bounded with `-- -max_total_time=<seconds>`; the weekly fuzz job runs all three for a bounded time.
 
 The public structs that a later release may widen (`Completion`, `IdentifyController`,
 `IdentifyNamespace` and `Namespace`) are `#[non_exhaustive]`. Build a `Namespace` from the Identify

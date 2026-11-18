@@ -8,9 +8,10 @@ bit leaks into the code type, so a driver matches the code against the wrong tab
 Expected to fail: the harness's `assert_eq!(rebuilt, completion.status)`.
 
 diff --git a/src/completion.rs b/src/completion.rs
+index 420363c..7ce2dbf 100644
 --- a/src/completion.rs
 +++ b/src/completion.rs
-@@ -79,7 +79,7 @@
+@@ -81,7 +81,7 @@ impl Completion {
      /// 7; 0 is [`STATUS_CODE_TYPE_GENERIC`].
      #[doc(alias = "SCT")]
      pub fn status_code_type(&self) -> u8 {
