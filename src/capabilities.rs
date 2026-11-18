@@ -13,11 +13,14 @@ impl Capabilities {
     pub fn maximum_queue_entries(self) -> u32 {
         (self.0 as u32 & 0xffff) + 1
     }
-    /// Doorbell Stride (`CAP.DSTRD`): doorbell N is at `0x1000 + N * (4 << DSTRD)` (a 4-bit field, so the shift
-    /// is at most 19 and the multiply cannot overflow a u64 for any real doorbell index).
+    /// Doorbell Stride (`CAP.DSTRD`), the raw 4-bit exponent field, not a byte count. The stride in
+    /// bytes is `2^(2 + value)`, so the value is at most 15 and the stride at most `4 << 15` bytes
+    /// (a shift of 17); doorbell N is at `0x1000 + N * (4 << value)`, and the multiply cannot
+    /// overflow a u64 for any real doorbell index. Base Specification 2.4, `CAP`
+    /// (section 3.1.4) and the doorbell register offsets (section 8.2.3).
     #[doc(alias = "CAP.DSTRD")]
     #[doc(alias = "DSTRD")]
-    pub fn doorbell_stride(self) -> u32 {
+    pub fn doorbell_stride_exponent(self) -> u32 {
         (self.0 >> 32) as u32 & 0xf
     }
     /// Timeout (`CAP.TO`) for the ready bit to follow the enable bit, in units of 500 milliseconds.
@@ -55,7 +58,7 @@ mod tests {
         let capabilities = Capabilities(0x7ffu64 | (0xf << 24) | (2 << 32) | (1 << 48) | (3 << 52));
         assert_eq!(capabilities.maximum_queue_entries(), 0x800);
         assert_eq!(capabilities.timeout_in_500_millisecond_units(), 0xf);
-        assert_eq!(capabilities.doorbell_stride(), 2);
+        assert_eq!(capabilities.doorbell_stride_exponent(), 2);
         assert_eq!(capabilities.minimum_page_size_bytes(), 8192);
         assert_eq!(capabilities.maximum_page_size_bytes(), 32768);
     }

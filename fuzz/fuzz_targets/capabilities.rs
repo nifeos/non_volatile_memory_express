@@ -27,7 +27,7 @@ fuzz_target!(|data: &[u8]| {
     let entries = capabilities.maximum_queue_entries();
     assert!((1..=1 << 16).contains(&entries));
     assert!(capabilities.timeout_in_500_millisecond_units() <= 0xff);
-    let stride = capabilities.doorbell_stride();
+    let stride = capabilities.doorbell_stride_exponent();
     assert!(stride <= 0xf);
     let page = capabilities.minimum_page_size_bytes();
     assert!(page.is_power_of_two() && (1 << 12..=1 << 27).contains(&page));

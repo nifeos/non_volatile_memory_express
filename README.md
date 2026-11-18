@@ -45,7 +45,7 @@ let pages = physical_region_page_pair(0x4000_0800, 4096, 4096).expect("two pages
 let read = Command::read(1, 1, 0, 8, pages);
 // Write `read.0` into submission slot `slot`, issue a write barrier, then ring the tail:
 let slot = submission_queue.push().expect("the ring has room");
-// The third argument is the raw `CAP.DSTRD` field, `Capabilities::doorbell_stride`, not bytes.
+// The third argument is the raw `CAP.DSTRD` field, `Capabilities::doorbell_stride_exponent`, not bytes.
 assert_eq!(doorbell(1, Doorbell::SubmissionTail, 0), 0x1008); // write the tail here
 assert_eq!((slot, submission_queue.tail()), (0, 1));
 assert_eq!(read.0[1], 1);

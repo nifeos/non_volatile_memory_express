@@ -4,7 +4,7 @@ The defect: `doorbell` drops the factor of two in `index = 2 * queue_id + role`,
 completion-head doorbell and queue `q + 1`'s submission-tail doorbell are the same register. A
 head write then lands on a tail.
 
-Expected to fail: the harness's `assert!(doorbell(first_queue_id, first_role, doorbell_stride) != doorbell(second_queue_id, second_role, doorbell_stride))`.
+Expected to fail: the harness's `assert!(doorbell(first_queue_id, first_role, doorbell_stride_exponent) != doorbell(second_queue_id, second_role, doorbell_stride_exponent))`.
 
 diff --git a/src/doorbell.rs b/src/doorbell.rs
 --- a/src/doorbell.rs
@@ -12,7 +12,7 @@ diff --git a/src/doorbell.rs b/src/doorbell.rs
 @@ -35,7 +35,7 @@
  /// assert_eq!(doorbell(1, Doorbell::CompletionHead, 0), 0x100c);
  /// ```
- pub fn doorbell(queue_id: u16, role: Doorbell, doorbell_stride: u32) -> u64 {
+ pub fn doorbell(queue_id: u16, role: Doorbell, doorbell_stride_exponent: u32) -> u64 {
 -    let index = 2 * queue_id as u64
 +    let index = queue_id as u64
          + match role {

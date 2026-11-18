@@ -26,7 +26,8 @@ pub fn parse_identify_namespace(data: &[u8]) -> Option<IdentifyNamespace> {
 }
 
 /// **The LBA data shift the namespace is formatted with, whatever it is**: the same `LBADS`
-/// (LBA Data Size) byte [`parse_identify_namespace`] reads, before that function's bounds refuse
+/// (LBA Data Size, bits 23:16 of the LBA Format Data Structure in the NVM Command Set
+/// Specification 1.3) byte [`parse_identify_namespace`] reads, before that function's bounds refuse
 /// it. `None` only when the structure is too short to carry the format table.
 ///
 /// It exists so a refusal can say what it refused. A drive must be formatted so that
@@ -51,7 +52,8 @@ pub struct IdentifyNamespace {
     #[doc(alias = "NSZE")]
     pub blocks: u64,
     /// `1 << logical_block_size_shift` bytes per logical block; between 9 and 12 by construction.
-    /// The specification calls this exponent the LBA Data Size (`LBADS`) of the format that
+    /// The specification calls this exponent the LBA Data Size (`LBADS`, bits 23:16 of the LBA
+    /// Format Data Structure in the NVM Command Set Specification 1.3) of the format that
     /// Formatted LBA Size (`FLBAS`) selects.
     #[doc(alias = "LBADS")]
     #[doc(alias = "FLBAS")]
