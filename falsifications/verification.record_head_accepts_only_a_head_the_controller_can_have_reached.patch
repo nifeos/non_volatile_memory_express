@@ -7,10 +7,10 @@ tail then frees slots holding commands it has not read, and the next push overwr
 Expected to fail: the harness's `assert!(reachable)`.
 
 diff --git a/src/queues.rs b/src/queues.rs
-index a08ca91..2afb579 100644
+index 6413a4f..037281e 100644
 --- a/src/queues.rs
 +++ b/src/queues.rs
-@@ -82,12 +82,6 @@ impl SubmissionQueue {
+@@ -93,12 +93,6 @@ impl SubmissionQueue {
          if head >= self.entries {
              return Err(ImpossibleHeadError { head });
          }

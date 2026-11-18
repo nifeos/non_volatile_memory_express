@@ -8,9 +8,10 @@ then names a logical block eight times too far along, while the byte bound still
 Expected to fail: the harness's `assert!(starting_logical_block + blocks <= namespace_blocks)`.
 
 diff --git a/src/namespace.rs b/src/namespace.rs
+index 31dd96a..e4f2a0d 100644
 --- a/src/namespace.rs
 +++ b/src/namespace.rs
-@@ -126,7 +126,7 @@
+@@ -127,7 +127,7 @@ impl Namespace {
          if !self.holds_whole_block(block) {
              return None;
          }
