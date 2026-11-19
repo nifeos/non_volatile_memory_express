@@ -152,6 +152,20 @@ mod linux {
             }
             Ok(shape)
         }
+
+        /// Refuse a shape the controller cannot take.
+        fn check_against(self, capabilities: Capabilities) -> Outcome<()> {
+            if !(capabilities.minimum_page_size_bytes()..=capabilities.maximum_page_size_bytes())
+                .contains(&self.page_bytes)
+                || capabilities.maximum_queue_entries() < u32::from(self.depth)
+            {
+                return Err(format!(
+                    "the controller takes no {}-byte page or no ring of {} entries",
+                    self.page_bytes, self.depth
+                ));
+            }
+            Ok(())
+        }
     }
 
     /// Run the example, report on `out`, and power off when this is process 1.
@@ -607,15 +621,7 @@ mod linux {
                 | u64::from(registers.read(CONTROLLER_CAPABILITIES_REGISTER + 4)) << 32,
         );
         let _ = writeln!(out, "qemu_driver: {device}, CAP {:#018x}", capabilities.0);
-        if !(capabilities.minimum_page_size_bytes()..=capabilities.maximum_page_size_bytes())
-            .contains(&shape.page_bytes)
-            || capabilities.maximum_queue_entries() < u32::from(shape.depth)
-        {
-            return Err(format!(
-                "the controller takes no {}-byte page or no ring of {} entries",
-                shape.page_bytes, shape.depth
-            ));
-        }
+        shape.check_against(capabilities)?;
         let stride = capabilities.doorbell_stride_exponent();
         let mut admin = QueuePair::new(0, shape)?;
         let configuration = bring_up(&registers, capabilities, &admin, shape)?;

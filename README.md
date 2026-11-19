@@ -209,7 +209,7 @@ specification sets (section 7.6.1). The offsets are in the `registers` module.
   up to 513 pages.
 - `parse_identify_controller` reads `MDTS` and `NN` and leaves the queue entry sizes, `SQES` and
   `CQES` (bytes 512 and 513), unread. `enabled_controller_configuration` always configures
-  64-byte submission and 16-byte completion entries, the sizes of the NVM command set, which the
+  64-byte submission and 16-byte completion entries, the sizes of the non-volatile memory (NVM) command set, which the
   command builders and both rings assume and which Linux also writes unconditionally. A driver for
   a controller that reports other sizes reads those two bytes itself.
 - `parse_identify_namespace` refuses LBA formats outside 512 bytes to 4 KiB per block.
