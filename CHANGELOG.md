@@ -3,7 +3,7 @@
 Dates are UTC. One line per release, what changed and why, so a reader of the diff has the
 sentence beside it.
 
-## Unreleased
+## 0.1.0-pre.3
 
 - Names follow the architect's rulings, with no alias for the old spellings. `InFlight` is
   `CommandIdentifierSet`, and its `mint` is `acquire`. `Completion::command_retry_delay` is
