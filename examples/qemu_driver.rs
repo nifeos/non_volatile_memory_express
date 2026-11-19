@@ -2,9 +2,17 @@
 //! user space with no kernel driver bound to it.
 //!
 //! It brings the controller up, reads Identify Controller and Identify namespace 1, creates one
-//! I/O queue pair, reads block 0, writes block 1, flushes, reads block 1 back, and shuts the
-//! controller down cleanly. Block 0 is expected to start with `MARKER`, which the host writes
-//! into the disk image before it starts QEMU, so a read that returns the wrong bytes fails.
+//! I/O queue pair, reads block 0, writes block 1, flushes, reads block 1 back, reads block 0 until
+//! both rings of the pair have wrapped twice more, and shuts the controller down cleanly. Block 0
+//! is expected to start with `MARKER`, which the host writes into the disk image before it starts
+//! QEMU, so a read that returns the wrong bytes fails. Every submission queue head the controller
+//! reports must be the tail the example last wrote, since one command is in flight at a time.
+//!
+//! Two kernel command line words shape the run. `qemu_driver.depth=<entries>` sets the depth of
+//! both ring pairs (64 by default; 2 is the smallest, and wraps every ring within the run).
+//! `qemu_driver.page_bytes=<bytes>` sets the memory page size the controller is configured for
+//! (4096 by default). A page larger than the host's 4 KiB page comes from a 2 MiB huge page, which
+//! is physically contiguous, so process 1 reserves eight of them first.
 //!
 //! It refuses any controller but QEMU's (Peripheral Component Interconnect (PCI) vendor 1b36, device 0010) and any device a kernel
 //! driver holds, so it cannot write to a real drive. It needs root, a kernel without an I/O memory
@@ -52,10 +60,11 @@ mod linux {
     const MARKER: &[u8] = b"non_volatile_memory_express QEMU run, block 0\n";
     /// What this example writes to block 1, repeated to fill the block.
     const WRITTEN: &[u8] = b"written by the qemu_driver example, block 1\n";
-    /// The one memory page size this example uses, for the rings and the transfers alike.
-    const PAGE_BYTES: u64 = 4096;
-    /// Each ring holds 64 entries: a submission ring of 64-byte entries then fills its page.
-    const ENTRIES: u16 = 64;
+    /// The default memory page size, for the rings and the transfer buffers alike.
+    const DEFAULT_PAGE_BYTES: u64 = 4096;
+    /// By default each ring holds 64 entries: a submission ring of 64-byte entries then fills a
+    /// 4 KiB page.
+    const DEFAULT_DEPTH: u16 = 64;
     /// The namespace every QEMU `nvme` device without an `nvme-ns` device has.
     const NAMESPACE_ID: u32 = 1;
     /// How long one admin or I/O command may take before the example gives up.
@@ -67,6 +76,15 @@ mod linux {
     const PROTECTION_READ_WRITE: c_int = 0x1 | 0x2;
     const MAP_SHARED: c_int = 0x01;
     const MAP_PRIVATE_ANONYMOUS_POPULATE: c_int = 0x02 | 0x20 | 0x8000;
+    const MAP_HUGE_PAGE: c_int = 0x40000;
+    /// The host's page, which `/proc/self/pagemap` indexes by.
+    const HOST_PAGE_BYTES: u64 = 4096;
+    /// The huge page a larger controller page comes from: one physically contiguous run.
+    const HUGE_PAGE_BYTES: u64 = 2 << 20;
+    /// How many huge pages process 1 reserves: six pages of memory for the controller, and spare.
+    const HUGE_PAGES_RESERVED: &str = "8";
+    /// The bytes one read or write moves: one transfer unit of the namespace, whatever the page.
+    const TRANSFER_BYTES: u64 = 4096;
     const LINUX_REBOOT_POWER_OFF: c_int = 0x4321_fedc;
 
     unsafe extern "C" {
@@ -92,11 +110,56 @@ mod linux {
 
     type Outcome<T> = Result<T, String>;
 
+    /// The depth of each ring and the memory page size, from the kernel command line.
+    #[derive(Clone, Copy)]
+    struct Shape {
+        depth: u16,
+        page_bytes: u64,
+    }
+
+    impl Shape {
+        fn from_command_line() -> Outcome<Self> {
+            let line = fs::read_to_string("/proc/cmdline").unwrap_or_default();
+            let mut shape = Shape {
+                depth: DEFAULT_DEPTH,
+                page_bytes: DEFAULT_PAGE_BYTES,
+            };
+            for word in line.split_whitespace() {
+                if let Some(value) = word.strip_prefix("qemu_driver.depth=") {
+                    shape.depth = value.parse().map_err(|_| format!("bad depth {value:?}"))?;
+                } else if let Some(value) = word.strip_prefix("qemu_driver.page_bytes=") {
+                    shape.page_bytes = value
+                        .parse()
+                        .map_err(|_| format!("bad page size {value:?}"))?;
+                }
+            }
+            if shape.depth < 2 {
+                return Err(format!(
+                    "a ring holds at least 2 entries, not {}",
+                    shape.depth
+                ));
+            }
+            if u64::from(shape.depth) * 64 > shape.page_bytes {
+                return Err(format!(
+                    "a depth of {} does not fit one ring in a {}-byte page",
+                    shape.depth, shape.page_bytes
+                ));
+            }
+            if !shape.page_bytes.is_power_of_two()
+                || !(HOST_PAGE_BYTES..=HUGE_PAGE_BYTES).contains(&shape.page_bytes)
+            {
+                return Err(format!("no memory for {}-byte pages", shape.page_bytes));
+            }
+            Ok(shape)
+        }
+    }
+
     /// Run the example, report on `out`, and power off when this is process 1.
     pub fn main() -> i32 {
         let is_initial_process = std::process::id() == 1;
         if is_initial_process {
             mount_kernel_file_systems();
+            let _ = fs::write("/proc/sys/vm/nr_hugepages", HUGE_PAGES_RESERVED);
         }
         let mut out: Box<dyn Write> = match OpenOptions::new().write(true).open("/dev/console") {
             Ok(console) if is_initial_process => Box::new(console),
@@ -147,50 +210,67 @@ mod linux {
         }
     }
 
-    /// One page of memory the controller reads or writes, locked in place, with its physical
-    /// address read from `/proc/self/pagemap`.
+    /// One memory page of the controller's size that it reads or writes, physically contiguous
+    /// and locked in place, with its physical address read from `/proc/self/pagemap`.
     struct DirectMemoryPage {
         virtual_address: *mut u32,
         physical_address: u64,
+        length_bytes: u64,
     }
 
     impl DirectMemoryPage {
-        fn new() -> Outcome<Self> {
+        /// A host page for a 4 KiB controller page; a huge page, of which the controller uses
+        /// the first `page_bytes`, for anything larger.
+        fn new(page_bytes: u64) -> Outcome<Self> {
+            let (mapped_bytes, flags) = if page_bytes == HOST_PAGE_BYTES {
+                (HOST_PAGE_BYTES, MAP_PRIVATE_ANONYMOUS_POPULATE)
+            } else {
+                (
+                    HUGE_PAGE_BYTES,
+                    MAP_PRIVATE_ANONYMOUS_POPULATE | MAP_HUGE_PAGE,
+                )
+            };
             // SAFETY: an anonymous private mapping takes no file and aliases nothing.
             let mapped_virtual_address = unsafe {
                 mmap(
                     core::ptr::null_mut(),
-                    PAGE_BYTES as usize,
+                    mapped_bytes as usize,
                     PROTECTION_READ_WRITE,
-                    MAP_PRIVATE_ANONYMOUS_POPULATE,
+                    flags,
                     -1,
                     0,
                 )
             };
             if mapped_virtual_address as isize == -1 {
-                return Err("mmap of a page for the controller failed".into());
+                return Err(format!(
+                    "mmap of {mapped_bytes} bytes for the controller failed (no huge pages?)"
+                ));
             }
-            // SAFETY: `mapped_virtual_address` is the page just mapped, `PAGE_BYTES` long.
-            if unsafe { mlock(mapped_virtual_address, PAGE_BYTES as usize) } != 0 {
+            // SAFETY: `mapped_virtual_address` is the mapping just made, `mapped_bytes` long.
+            if unsafe { mlock(mapped_virtual_address, mapped_bytes as usize) } != 0 {
                 return Err("mlock of a page for the controller failed".into());
             }
             let virtual_address = mapped_virtual_address.cast::<u32>();
             let physical_address = physical_address_of(virtual_address as u64)?;
+            if physical_address % page_bytes != 0 {
+                return Err(format!("page at {physical_address:#x} is not aligned"));
+            }
             Ok(DirectMemoryPage {
                 virtual_address,
                 physical_address,
+                length_bytes: page_bytes,
             })
         }
 
         fn read_u32(&self, byte_offset: usize) -> u32 {
-            assert!(byte_offset + 4 <= PAGE_BYTES as usize && byte_offset % 4 == 0);
+            assert!(byte_offset + 4 <= self.length_bytes as usize && byte_offset % 4 == 0);
             // SAFETY: inside the page and aligned (asserted above); volatile because the
             // controller writes this memory behind the compiler's back.
             unsafe { core::ptr::read_volatile(self.virtual_address.add(byte_offset / 4)) }
         }
 
         fn write_u32(&self, byte_offset: usize, value: u32) {
-            assert!(byte_offset + 4 <= PAGE_BYTES as usize && byte_offset % 4 == 0);
+            assert!(byte_offset + 4 <= self.length_bytes as usize && byte_offset % 4 == 0);
             // SAFETY: inside the page and aligned (asserted above); volatile because the
             // controller reads this memory.
             unsafe {
@@ -198,14 +278,19 @@ mod linux {
             }
         }
 
+        /// The first `TRANSFER_BYTES` of the page, which hold an Identify answer or one block.
         fn bytes(&self) -> Vec<u8> {
-            (0..PAGE_BYTES as usize / 4)
+            (0..TRANSFER_BYTES as usize / 4)
                 .flat_map(|word| self.read_u32(word * 4).to_le_bytes())
                 .collect()
         }
 
         fn fill(&self, bytes: &[u8]) {
-            for (word, chunk) in bytes.chunks(4).enumerate().take(PAGE_BYTES as usize / 4) {
+            for (word, chunk) in bytes
+                .chunks(4)
+                .enumerate()
+                .take(TRANSFER_BYTES as usize / 4)
+            {
                 let mut value = [0u8; 4];
                 value[..chunk.len()].copy_from_slice(chunk);
                 self.write_u32(word * 4, u32::from_le_bytes(value));
@@ -220,7 +305,7 @@ mod linux {
             File::open("/proc/self/pagemap").map_err(|error| format!("pagemap: {error}"))?;
         let mut entry = [0u8; 8];
         page_map
-            .seek(SeekFrom::Start(virtual_address / PAGE_BYTES * 8))
+            .seek(SeekFrom::Start(virtual_address / HOST_PAGE_BYTES * 8))
             .and_then(|_| page_map.read_exact(&mut entry))
             .map_err(|error| format!("pagemap read: {error}"))?;
         let entry = u64::from_le_bytes(entry);
@@ -228,7 +313,7 @@ mod linux {
         if entry >> 63 == 0 || page_frame_number == 0 {
             return Err("pagemap gives no frame (not root, or the page is not present)".into());
         }
-        Ok(page_frame_number * PAGE_BYTES + virtual_address % PAGE_BYTES)
+        Ok(page_frame_number * HOST_PAGE_BYTES + virtual_address % HOST_PAGE_BYTES)
     }
 
     /// Base Address Register 0, mapped from the device's `resource0` file.
@@ -314,17 +399,27 @@ mod linux {
         completion_memory: DirectMemoryPage,
         submission: SubmissionQueue,
         completion: CompletionQueue,
+        depth: u16,
+        /// Every submission queue head the controller reported, in order.
+        reported_heads: Vec<u16>,
     }
 
     impl QueuePair {
-        fn new(queue_id: u16) -> Outcome<Self> {
+        fn new(queue_id: u16, shape: Shape) -> Outcome<Self> {
             Ok(QueuePair {
                 queue_id,
-                submission_memory: DirectMemoryPage::new()?,
-                completion_memory: DirectMemoryPage::new()?,
-                submission: SubmissionQueue::new(ENTRIES),
-                completion: CompletionQueue::new(ENTRIES),
+                submission_memory: DirectMemoryPage::new(shape.page_bytes)?,
+                completion_memory: DirectMemoryPage::new(shape.page_bytes)?,
+                submission: SubmissionQueue::new(shape.depth),
+                completion: CompletionQueue::new(shape.depth),
+                depth: shape.depth,
+                reported_heads: Vec::new(),
             })
+        }
+
+        /// How many times the completion ring has wrapped: one command completes per entry.
+        fn laps(&self) -> usize {
+            self.reported_heads.len() / usize::from(self.depth)
         }
 
         /// Submit the command `build` makes for a fresh identifier, poll for its completion as the
@@ -388,6 +483,13 @@ mod linux {
             self.submission
                 .record_head(done.submission_queue_head)
                 .map_err(|error| format!("{error}"))?;
+            self.reported_heads.push(done.submission_queue_head);
+            if u32::from(done.submission_queue_head) != tail {
+                return Err(format!(
+                    "head {} after the one command in flight, tail {tail}",
+                    done.submission_queue_head
+                ));
+            }
             let head = u32::from(self.completion.pop());
             registers.write(
                 doorbell(self.queue_id, Doorbell::CompletionHead, stride),
@@ -460,6 +562,7 @@ mod linux {
         registers: &Registers,
         capabilities: Capabilities,
         admin: &QueuePair,
+        shape: Shape,
     ) -> Outcome<u32> {
         let ready_timeout = Duration::from_millis(
             500 * u64::from(capabilities.timeout_in_500_millisecond_units().max(1)),
@@ -472,7 +575,7 @@ mod linux {
             .map_err(|error| format!("disable: {error}"))?;
         registers.write(
             ADMIN_QUEUE_ATTRIBUTES_REGISTER,
-            admin_queue_attributes(ENTRIES, ENTRIES),
+            admin_queue_attributes(shape.depth, shape.depth),
         );
         registers.write_u64(
             ADMIN_SUBMISSION_QUEUE_BASE_PHYSICAL_ADDRESS_REGISTER,
@@ -482,8 +585,8 @@ mod linux {
             ADMIN_COMPLETION_QUEUE_BASE_PHYSICAL_ADDRESS_REGISTER,
             admin.completion_memory.physical_address,
         );
-        let configuration =
-            enabled_controller_configuration(PAGE_BYTES).ok_or("no configuration for the page")?;
+        let configuration = enabled_controller_configuration(shape.page_bytes)
+            .ok_or("no configuration for the page")?;
         registers.write(CONTROLLER_CONFIGURATION_REGISTER, configuration);
         registers
             .wait_for_status(ready_timeout, |status| {
@@ -495,6 +598,7 @@ mod linux {
 
     /// The whole run, from finding the device to its clean shutdown.
     fn run(out: &mut dyn Write) -> Outcome<()> {
+        let shape = Shape::from_command_line()?;
         let device = find_device()?;
         enable_bus_master(&device)?;
         let registers = Registers::map(&device)?;
@@ -504,18 +608,25 @@ mod linux {
         );
         let _ = writeln!(out, "qemu_driver: {device}, CAP {:#018x}", capabilities.0);
         if !(capabilities.minimum_page_size_bytes()..=capabilities.maximum_page_size_bytes())
-            .contains(&PAGE_BYTES)
-            || capabilities.maximum_queue_entries() < u32::from(ENTRIES)
+            .contains(&shape.page_bytes)
+            || capabilities.maximum_queue_entries() < u32::from(shape.depth)
         {
-            return Err("the controller takes neither 4 KiB pages nor 64-entry rings".into());
+            return Err(format!(
+                "the controller takes no {}-byte page or no ring of {} entries",
+                shape.page_bytes, shape.depth
+            ));
         }
         let stride = capabilities.doorbell_stride_exponent();
-        let mut admin = QueuePair::new(0)?;
-        let configuration = bring_up(&registers, capabilities, &admin)?;
-        let _ = writeln!(out, "qemu_driver: enabled, CC {configuration:#010x}");
+        let mut admin = QueuePair::new(0, shape)?;
+        let configuration = bring_up(&registers, capabilities, &admin, shape)?;
+        let _ = writeln!(
+            out,
+            "qemu_driver: enabled, CC {configuration:#010x}, {}-byte pages, rings of {}",
+            shape.page_bytes, shape.depth
+        );
 
         let mut identifiers = CommandIdentifierSet::<1>::new();
-        let identify = DirectMemoryPage::new()?;
+        let identify = DirectMemoryPage::new(shape.page_bytes)?;
         let identify_physical_address = identify.physical_address;
         admin.execute(&registers, stride, &mut identifiers, |command_id| {
             Ok(Command::identify(
@@ -542,7 +653,8 @@ mod linux {
             ))
         })?;
         let identified = parse_identify_namespace(&identify.bytes()).ok_or("Identify namespace")?;
-        let namespace = Namespace::from_identify(&identified, PAGE_BYTES).ok_or("the namespace")?;
+        let namespace =
+            Namespace::from_identify(&identified, TRANSFER_BYTES).ok_or("the namespace")?;
         let _ = writeln!(
             out,
             "qemu_driver: namespace {NAMESPACE_ID}, {} blocks of {} bytes",
@@ -550,14 +662,14 @@ mod linux {
             1u64 << identified.logical_block_size_shift
         );
 
-        let mut input_output = QueuePair::new(1)?;
+        let mut input_output = QueuePair::new(1, shape)?;
         let completion_physical_address = input_output.completion_memory.physical_address;
         let submission_physical_address = input_output.submission_memory.physical_address;
         admin.execute(&registers, stride, &mut identifiers, |command_id| {
             Ok(Command::create_io_completion_queue(
                 command_id,
                 1,
-                ENTRIES,
+                shape.depth,
                 completion_physical_address,
             ))
         })?;
@@ -565,12 +677,21 @@ mod linux {
             Ok(Command::create_io_submission_queue(
                 command_id,
                 1,
-                ENTRIES,
+                shape.depth,
                 1,
                 submission_physical_address,
             ))
         })?;
-        transfers(out, &registers, stride, &mut input_output, &namespace)?;
+        transfers(
+            out,
+            &registers,
+            stride,
+            &mut input_output,
+            &namespace,
+            shape,
+        )?;
+        report_heads(out, "admin", &admin);
+        report_heads(out, "I/O", &input_output);
 
         registers.write(
             CONTROLLER_CONFIGURATION_REGISTER,
@@ -592,9 +713,10 @@ mod linux {
         stride: u32,
         queue: &mut QueuePair,
         namespace: &Namespace,
+        shape: Shape,
     ) -> Outcome<()> {
         let mut identifiers = CommandIdentifierSet::<1>::new();
-        let data = DirectMemoryPage::new()?;
+        let data = DirectMemoryPage::new(shape.page_bytes)?;
         let data_physical_address = data.physical_address;
         let transfer = |block, direction| {
             move |command_id| {
@@ -604,7 +726,7 @@ mod linux {
                         NAMESPACE_ID,
                         block,
                         data_physical_address,
-                        PAGE_BYTES,
+                        shape.page_bytes,
                         direction,
                     )
                     .ok_or_else(|| format!("no transfer command for block {block}"))
@@ -626,7 +748,7 @@ mod linux {
             .iter()
             .copied()
             .cycle()
-            .take(PAGE_BYTES as usize)
+            .take(TRANSFER_BYTES as usize)
             .collect();
         data.fill(&written);
         queue.execute(
@@ -638,7 +760,7 @@ mod linux {
         queue.execute(registers, stride, &mut identifiers, |command_id| {
             Ok(Command::flush(command_id, NAMESPACE_ID))
         })?;
-        data.fill(&[0; PAGE_BYTES as usize]);
+        data.fill(&[0; TRANSFER_BYTES as usize]);
         queue.execute(
             registers,
             stride,
@@ -652,6 +774,35 @@ mod linux {
             out,
             "qemu_driver: wrote block 1, flushed, read it back unchanged"
         );
+
+        // Two more laps of both rings, so a depth-2 run crosses each wrap several times.
+        let laps_wanted = queue.laps() + 2;
+        while queue.laps() < laps_wanted {
+            data.fill(&[0; TRANSFER_BYTES as usize]);
+            queue.execute(
+                registers,
+                stride,
+                &mut identifiers,
+                transfer(0, Direction::Read),
+            )?;
+            if !data.bytes().starts_with(MARKER) {
+                return Err("a read of block 0 across a wrap returned other bytes".into());
+            }
+        }
         Ok(())
+    }
+
+    /// Print how far a ring pair ran: the commands, the laps, and up to 16 reported heads.
+    fn report_heads(out: &mut dyn Write, which: &str, queue: &QueuePair) {
+        let heads = &queue.reported_heads;
+        let shown: Vec<String> = heads.iter().take(16).map(u16::to_string).collect();
+        let more = if heads.len() > 16 { " ..." } else { "" };
+        let _ = writeln!(
+            out,
+            "qemu_driver: {which} ring pair, {} commands, {} laps, every head the tail: {}{more}",
+            heads.len(),
+            queue.laps(),
+            shown.join(" ")
+        );
     }
 }
