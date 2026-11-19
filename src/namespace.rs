@@ -70,7 +70,7 @@ impl Namespace {
     pub fn from_identify(identify: &IdentifyNamespace, unit_bytes: u64) -> Option<Self> {
         let blocks_per_transfer = identify.blocks_per_transfer(unit_bytes)?;
         let capacity_bytes = identify
-            .blocks
+            .size_in_logical_blocks
             .checked_mul(1 << identify.logical_block_size_shift)?;
         Namespace::new(capacity_bytes, unit_bytes, blocks_per_transfer)
     }

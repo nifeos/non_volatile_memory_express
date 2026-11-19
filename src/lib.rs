@@ -3,11 +3,11 @@
 
 mod capabilities;
 mod command;
+mod command_identifier_set;
 mod completion;
 mod configuration;
 mod doorbell;
 mod identify;
-mod in_flight;
 mod namespace;
 mod physical_region_page;
 mod queues;
@@ -23,19 +23,20 @@ pub use command::{
     CONTROLLER_OR_NAMESPACE_STRUCTURE_CONTROLLER, CONTROLLER_OR_NAMESPACE_STRUCTURE_NAMESPACE,
     Command, NON_VOLATILE_MEMORY_FLUSH, NON_VOLATILE_MEMORY_READ, NON_VOLATILE_MEMORY_WRITE,
 };
+pub use command_identifier_set::{CommandIdentifierSet, NotInFlightError};
 pub use completion::{
     Completion, GENERIC_STATUS_INVALID_FIELD_IN_COMMAND, GENERIC_STATUS_SUCCESSFUL_COMPLETION,
     STATUS_CODE_TYPE_GENERIC,
 };
 pub use configuration::{
-    admin_queue_attributes, enabled_controller_configuration, shutdown_controller_configuration,
+    admin_queue_attributes, controller_configuration_with_shutdown_notification,
+    enabled_controller_configuration,
 };
 pub use doorbell::{Doorbell, doorbell};
 pub use identify::{
     IdentifyController, IdentifyNamespace, logical_block_size_shift, parse_identify_controller,
     parse_identify_namespace,
 };
-pub use in_flight::{InFlight, NotInFlightError};
 pub use namespace::{Direction, Namespace};
 pub use physical_region_page::{
     PhysicalRegionPagePair, physical_region_page_list, physical_region_page_pair,

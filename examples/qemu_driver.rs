@@ -37,10 +37,10 @@ mod linux {
     use non_volatile_memory_express::{
         CONTROLLER_OR_NAMESPACE_STRUCTURE_CONTROLLER, CONTROLLER_OR_NAMESPACE_STRUCTURE_NAMESPACE,
         CONTROLLER_STATUS_FATAL, CONTROLLER_STATUS_READY, CONTROLLER_STATUS_SHUTDOWN_COMPLETE,
-        Capabilities, Command, Completion, CompletionQueue, Direction, Doorbell, InFlight,
-        Namespace, SubmissionQueue, admin_queue_attributes, doorbell,
+        Capabilities, Command, CommandIdentifierSet, Completion, CompletionQueue, Direction,
+        Doorbell, Namespace, SubmissionQueue, admin_queue_attributes,
+        controller_configuration_with_shutdown_notification, doorbell,
         enabled_controller_configuration, parse_identify_controller, parse_identify_namespace,
-        shutdown_controller_configuration,
     };
     use std::fs::{self, File, OpenOptions};
     use std::io::{Read, Seek, SeekFrom, Write};
@@ -333,10 +333,12 @@ mod linux {
             &mut self,
             registers: &Registers,
             stride: u32,
-            in_flight: &mut InFlight<1>,
+            identifiers: &mut CommandIdentifierSet<1>,
             build: impl FnOnce(u16) -> Outcome<Command>,
         ) -> Outcome<Completion> {
-            let command_id = in_flight.mint().ok_or("no command identifier is free")?;
+            let command_id = identifiers
+                .acquire()
+                .ok_or("no command identifier is free")?;
             let command = build(command_id)?;
             let slot = self
                 .submission
@@ -380,7 +382,7 @@ mod linux {
             if !self.completion.is_owned(&done) || done.submission_queue_id != self.queue_id {
                 return Err(format!("a completion for another queue: {done:?}"));
             }
-            in_flight
+            identifiers
                 .release(done.command_id)
                 .map_err(|_| format!("a completion for no command in flight: {done:?}"))?;
             self.submission
@@ -512,10 +514,10 @@ mod linux {
         let configuration = bring_up(&registers, capabilities, &admin)?;
         let _ = writeln!(out, "qemu_driver: enabled, CC {configuration:#010x}");
 
-        let mut in_flight = InFlight::<1>::new();
+        let mut identifiers = CommandIdentifierSet::<1>::new();
         let identify = DirectMemoryPage::new()?;
         let identify_physical_address = identify.physical_address;
-        admin.execute(&registers, stride, &mut in_flight, |command_id| {
+        admin.execute(&registers, stride, &mut identifiers, |command_id| {
             Ok(Command::identify(
                 command_id,
                 CONTROLLER_OR_NAMESPACE_STRUCTURE_CONTROLLER,
@@ -531,7 +533,7 @@ mod linux {
             controller.maximum_namespace_id,
             controller.maximum_data_transfer_bytes(capabilities.minimum_page_size_bytes())
         );
-        admin.execute(&registers, stride, &mut in_flight, |command_id| {
+        admin.execute(&registers, stride, &mut identifiers, |command_id| {
             Ok(Command::identify(
                 command_id,
                 CONTROLLER_OR_NAMESPACE_STRUCTURE_NAMESPACE,
@@ -544,14 +546,14 @@ mod linux {
         let _ = writeln!(
             out,
             "qemu_driver: namespace {NAMESPACE_ID}, {} blocks of {} bytes",
-            identified.blocks,
+            identified.size_in_logical_blocks,
             1u64 << identified.logical_block_size_shift
         );
 
         let mut input_output = QueuePair::new(1)?;
         let completion_physical_address = input_output.completion_memory.physical_address;
         let submission_physical_address = input_output.submission_memory.physical_address;
-        admin.execute(&registers, stride, &mut in_flight, |command_id| {
+        admin.execute(&registers, stride, &mut identifiers, |command_id| {
             Ok(Command::create_io_completion_queue(
                 command_id,
                 1,
@@ -559,7 +561,7 @@ mod linux {
                 completion_physical_address,
             ))
         })?;
-        admin.execute(&registers, stride, &mut in_flight, |command_id| {
+        admin.execute(&registers, stride, &mut identifiers, |command_id| {
             Ok(Command::create_io_submission_queue(
                 command_id,
                 1,
@@ -572,7 +574,7 @@ mod linux {
 
         registers.write(
             CONTROLLER_CONFIGURATION_REGISTER,
-            shutdown_controller_configuration(configuration),
+            controller_configuration_with_shutdown_notification(configuration),
         );
         registers
             .wait_for_status(Duration::from_secs(10), |status| {
@@ -591,7 +593,7 @@ mod linux {
         queue: &mut QueuePair,
         namespace: &Namespace,
     ) -> Outcome<()> {
-        let mut in_flight = InFlight::<1>::new();
+        let mut identifiers = CommandIdentifierSet::<1>::new();
         let data = DirectMemoryPage::new()?;
         let data_physical_address = data.physical_address;
         let transfer = |block, direction| {
@@ -611,7 +613,7 @@ mod linux {
         queue.execute(
             registers,
             stride,
-            &mut in_flight,
+            &mut identifiers,
             transfer(0, Direction::Read),
         )?;
         let block_zero = data.bytes();
@@ -630,17 +632,17 @@ mod linux {
         queue.execute(
             registers,
             stride,
-            &mut in_flight,
+            &mut identifiers,
             transfer(1, Direction::Write),
         )?;
-        queue.execute(registers, stride, &mut in_flight, |command_id| {
+        queue.execute(registers, stride, &mut identifiers, |command_id| {
             Ok(Command::flush(command_id, NAMESPACE_ID))
         })?;
         data.fill(&[0; PAGE_BYTES as usize]);
         queue.execute(
             registers,
             stride,
-            &mut in_flight,
+            &mut identifiers,
             transfer(1, Direction::Read),
         )?;
         if data.bytes() != written {

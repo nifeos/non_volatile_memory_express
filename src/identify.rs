@@ -20,7 +20,7 @@ pub fn parse_identify_namespace(data: &[u8]) -> Option<IdentifyNamespace> {
         return None;
     }
     Some(IdentifyNamespace {
-        blocks: namespace_size,
+        size_in_logical_blocks: namespace_size,
         logical_block_size_shift: data_shift as u32,
     })
 }
@@ -50,7 +50,7 @@ pub fn logical_block_size_shift(data: &[u8]) -> Option<u8> {
 pub struct IdentifyNamespace {
     /// The namespace's size in logical blocks, the Namespace Size (`NSZE`).
     #[doc(alias = "NSZE")]
-    pub blocks: u64,
+    pub size_in_logical_blocks: u64,
     /// `1 << logical_block_size_shift` bytes per logical block; between 9 and 12 by construction.
     /// The specification calls this exponent the LBA Data Size (`LBADS`, bits 23:16 of the LBA
     /// Format Data Structure in the NVM Command Set Specification 1.3) of the format that
@@ -63,7 +63,7 @@ pub struct IdentifyNamespace {
 impl IdentifyNamespace {
     /// The namespace's capacity in bytes.
     pub fn capacity_bytes(&self) -> u64 {
-        self.blocks << self.logical_block_size_shift
+        self.size_in_logical_blocks << self.logical_block_size_shift
     }
     /// How many logical blocks one `unit_bytes`-byte transfer covers, always at least 1. `None` if
     /// `unit_bytes` is zero, is not a whole number of logical blocks (a namespace this driver
@@ -113,7 +113,7 @@ impl IdentifyNamespace {
 pub fn parse_identify_controller(data: &[u8]) -> Option<IdentifyController> {
     let number_of_namespaces = data.get(516..520)?;
     Some(IdentifyController {
-        maximum_data_transfer_size_shift: data[77],
+        maximum_data_transfer_page_shift: data[77],
         maximum_namespace_id: u32::from_le_bytes(number_of_namespaces.try_into().ok()?),
     })
 }
@@ -124,11 +124,11 @@ pub fn parse_identify_controller(data: &[u8]) -> Option<IdentifyController> {
 #[non_exhaustive]
 pub struct IdentifyController {
     /// The Maximum Data Transfer Size (`MDTS`) as the controller wrote it: a transfer may span at
-    /// most `2^maximum_data_transfer_size_shift` pages of the controller's minimum page size,
-    /// and 0 means the controller states no limit. Read it in bytes with
+    /// most `2^maximum_data_transfer_page_shift` pages, each the controller's minimum page size
+    /// (the shift counts pages, not bytes), and 0 means the controller states no limit. Read it in bytes with
     /// [`IdentifyController::maximum_data_transfer_bytes`].
     #[doc(alias = "MDTS")]
-    pub maximum_data_transfer_size_shift: u8,
+    pub maximum_data_transfer_page_shift: u8,
     /// The Number of Namespaces (`NN`): the largest namespace identifier valid on this controller.
     /// Not every identifier from 1 to it need be active; the
     /// [`crate::CONTROLLER_OR_NAMESPACE_STRUCTURE_ACTIVE_NAMESPACE_LIST`] selector lists the ones
@@ -145,7 +145,7 @@ impl IdentifyController {
     /// or list could otherwise describe.
     #[doc(alias = "MDTS")]
     pub fn maximum_data_transfer_bytes(&self, minimum_page_size_bytes: u64) -> u64 {
-        match self.maximum_data_transfer_size_shift {
+        match self.maximum_data_transfer_page_shift {
             0 => u64::MAX,
             exponent => 1u64.checked_shl(exponent.into()).map_or(u64::MAX, |pages| {
                 pages.saturating_mul(minimum_page_size_bytes)
@@ -165,7 +165,7 @@ mod tests {
         data[26] = 0; // FLBAS: format 0
         data[130] = 9; // format 0's LBADS: 512-byte blocks
         let id = parse_identify_namespace(&data).unwrap();
-        assert_eq!(id.blocks, 0x4000);
+        assert_eq!(id.size_in_logical_blocks, 0x4000);
         assert_eq!(id.logical_block_size_shift, 9);
         assert_eq!(id.capacity_bytes(), 0x4000 * 512);
         assert_eq!(id.blocks_per_transfer(4096), Some(8));
@@ -257,7 +257,7 @@ mod tests {
         // of their low bits reach as high as bit 12), so it cannot tell them apart, and it never
         // calls `blocks_per_transfer(0)` either.
         let id = IdentifyNamespace {
-            blocks: 1,
+            size_in_logical_blocks: 1,
             logical_block_size_shift: 9, // 512-byte blocks; mask is 511
         };
         assert_eq!(
@@ -279,7 +279,7 @@ mod tests {
     fn blocks_per_transfer_refuses_a_unit_too_large_to_count_rather_than_wrapping() {
         for shift in 9..=12u32 {
             let id = IdentifyNamespace {
-                blocks: 1,
+                size_in_logical_blocks: 1,
                 logical_block_size_shift: shift,
             };
             let block = 1u64 << shift;
@@ -311,7 +311,7 @@ mod tests {
         data[516..520].copy_from_slice(&0x0102_0304u32.to_le_bytes());
         data[520] = 0xff;
         let controller = parse_identify_controller(&data).unwrap();
-        assert_eq!(controller.maximum_data_transfer_size_shift, 3);
+        assert_eq!(controller.maximum_data_transfer_page_shift, 3);
         assert_eq!(controller.maximum_namespace_id, 0x0102_0304);
         assert_eq!(parse_identify_controller(&data[..520]), Some(controller));
         assert_eq!(parse_identify_controller(&data[..519]), None, "truncated");
@@ -323,7 +323,7 @@ mod tests {
     #[test]
     fn the_transfer_limit_is_a_power_of_two_of_minimum_pages_and_0_is_unlimited() {
         let controller = |exponent| IdentifyController {
-            maximum_data_transfer_size_shift: exponent,
+            maximum_data_transfer_page_shift: exponent,
             maximum_namespace_id: 1,
         };
         assert_eq!(controller(0).maximum_data_transfer_bytes(4096), u64::MAX);

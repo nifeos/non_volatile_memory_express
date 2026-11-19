@@ -35,7 +35,7 @@ fuzz_target!(|data: &[u8]| {
     assert_eq!(reported, Some(namespace.logical_block_size_shift as u8));
     assert!((9..=12).contains(&namespace.logical_block_size_shift));
     assert_eq!(
-        namespace.blocks,
+        namespace.size_in_logical_blocks,
         u64::from_le_bytes(structure[0..8].try_into().unwrap())
     );
 
@@ -46,7 +46,7 @@ fuzz_target!(|data: &[u8]| {
     assert_eq!(namespace.blocks_per_transfer(0), None);
 
     let capacity_fits = namespace
-        .blocks
+        .size_in_logical_blocks
         .checked_mul(1 << namespace.logical_block_size_shift)
         .is_some();
     let direction = if flags & (1 << 63) != 0 {
