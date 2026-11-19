@@ -60,15 +60,15 @@ const CONTROLLER_CONFIGURATION_FIELDS_DO_NOT_OVERLAP: () =
 ///
 /// ```
 /// use non_volatile_memory_express::{
-///     enabled_controller_configuration, shutdown_controller_configuration,
+///     enabled_controller_configuration, controller_configuration_with_shutdown_notification,
 /// };
 ///
 /// let running = enabled_controller_configuration(4096).unwrap();
-/// assert_eq!(shutdown_controller_configuration(running), 0x0046_4001);
+/// assert_eq!(controller_configuration_with_shutdown_notification(running), 0x0046_4001);
 /// ```
 #[doc(alias = "CC.SHN")]
 #[doc(alias = "SHN")]
-pub fn shutdown_controller_configuration(configuration: u32) -> u32 {
+pub fn controller_configuration_with_shutdown_notification(configuration: u32) -> u32 {
     (configuration & !(0b11 << 14)) | 0b01 << 14
 }
 
@@ -167,7 +167,7 @@ mod tests {
             u32::MAX,
             0x5555_5555,
         ] {
-            let shutdown = shutdown_controller_configuration(configuration);
+            let shutdown = controller_configuration_with_shutdown_notification(configuration);
             assert_eq!((shutdown >> 14) & 0b11, 0b01, "{configuration:#x}");
             assert_eq!(shutdown & !(0b11 << 14), configuration & !(0b11 << 14));
         }

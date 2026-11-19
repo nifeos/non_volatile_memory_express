@@ -22,8 +22,8 @@ pub struct Completion {
     pub phase: bool,
     /// The 15-bit status field (`SF`), dword 3 bits 17 to 31; 0 is success. The methods
     /// [`Completion::is_success`], [`Completion::status_code`], [`Completion::status_code_type`],
-    /// [`Completion::command_retry_delay`], [`Completion::is_more_set`] and
-    /// [`Completion::is_do_not_retry_set`] read its parts.
+    /// [`Completion::command_retry_delay_selector`], [`Completion::has_more_status_information`] and
+    /// [`Completion::is_retry_refused`] read its parts.
     #[doc(alias = "SF")]
     pub status: u16,
 }
@@ -88,7 +88,7 @@ impl Completion {
     /// 29), from 0 to 3: 0 asks for no delay before a retry, and 1 to 3 name one of the three
     /// delay times the controller reports in its Identify Controller structure.
     #[doc(alias = "CRD")]
-    pub fn command_retry_delay(&self) -> u8 {
+    pub fn command_retry_delay_selector(&self) -> u8 {
         (self.status >> 11) as u8 & 0x3
     }
 
@@ -96,7 +96,7 @@ impl Completion {
     /// status information for this command in its Error Information log page.
     #[doc(alias = "M")]
     #[doc(alias = "More")]
-    pub fn is_more_set(&self) -> bool {
+    pub fn has_more_status_information(&self) -> bool {
         self.status & (1 << 13) != 0
     }
 
@@ -105,7 +105,7 @@ impl Completion {
     /// resubmitting.
     #[doc(alias = "DNR")]
     #[doc(alias = "Do Not Retry")]
-    pub fn is_do_not_retry_set(&self) -> bool {
+    pub fn is_retry_refused(&self) -> bool {
         self.status & (1 << 14) != 0
     }
 }
@@ -154,9 +154,9 @@ mod tests {
                 completion.is_success(),
                 completion.status_code(),
                 completion.status_code_type(),
-                completion.command_retry_delay(),
-                completion.is_more_set(),
-                completion.is_do_not_retry_set(),
+                completion.command_retry_delay_selector(),
+                completion.has_more_status_information(),
+                completion.is_retry_refused(),
             )
         };
         assert_eq!(parts(0), (true, 0, 0, 0, false, false));

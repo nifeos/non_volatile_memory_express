@@ -1,13 +1,14 @@
 //! A controller in software, over two `Vec`s, driven through several laps of both rings.
 //!
 //! The controller consumes the submission ring up to the tail the driver rings and writes one
-//! completion per command, with the phase of its lap. The driver mints each command identifier,
+//! completion per command, with the phase of its lap. The driver acquires each command identifier,
 //! checks every completion's head and identifier, and pops until it meets a stale entry. Copy
 //! `SoftwareController` as a test double; `cargo test` runs the loop as a test. Run it with
 //! `cargo run --example software_controller` to see each submission queue head reported.
 
 use non_volatile_memory_express::{
-    Command, Completion, CompletionQueue, InFlight, SubmissionQueue, physical_region_page_pair,
+    Command, CommandIdentifierSet, Completion, CompletionQueue, SubmissionQueue,
+    physical_region_page_pair,
 };
 
 const ENTRIES: u16 = 4;
@@ -63,12 +64,12 @@ fn run(batches: usize) -> (Vec<u16>, String) {
     let mut controller = SoftwareController::new();
     let mut submission_queue = SubmissionQueue::new(ENTRIES);
     let mut completion_queue = CompletionQueue::new(ENTRIES);
-    let mut in_flight = InFlight::<1>::new();
+    let mut identifiers = CommandIdentifierSet::<1>::new();
     let mut heads = Vec::new();
     for batch in 0..batches {
         for block in 0..batch % 3 + 1 {
-            let command_id = in_flight
-                .mint()
+            let command_id = identifiers
+                .acquire()
                 .expect("at most three commands are in flight");
             let pages = physical_region_page_pair(0x10_0000, 4096, 4096).expect("one page");
             let read = Command::read(command_id, 1, block as u64 * 8, 8, pages);
@@ -85,7 +86,7 @@ fn run(batches: usize) -> (Vec<u16>, String) {
             }
             let completion = Completion::from_dwords(dwords);
             assert!(completion.is_success() && completion.submission_queue_id == 1);
-            in_flight
+            identifiers
                 .release(completion.command_id)
                 .expect("the controller completes only commands it was given");
             submission_queue
@@ -94,7 +95,7 @@ fn run(batches: usize) -> (Vec<u16>, String) {
             heads.push(completion.submission_queue_head);
             completion_queue.pop();
         }
-        assert!(in_flight.is_empty() && submission_queue.head() == submission_queue.tail());
+        assert!(identifiers.is_empty() && submission_queue.head() == submission_queue.tail());
     }
     // A broken controller reports a head one past the tail, a command it was never given.
     let impossible = (submission_queue.tail() + 1) % ENTRIES;

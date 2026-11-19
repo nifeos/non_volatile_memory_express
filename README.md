@@ -71,7 +71,7 @@ assert_eq!(completion_queue.pop(), 1);
 ```
 
 `examples/software_controller.rs` runs the whole loop against a controller modeled over two
-`Vec`s: it drives both rings through three laps, checks each identifier with `InFlight` and each
+`Vec`s: it drives both rings through three laps, checks each identifier with `CommandIdentifierSet` and each
 reported head, and refuses one impossible head at the end. `cargo test` runs it, and
 `cargo run --example software_controller` prints the heads. Copy its `SoftwareController` as a test
 double.
@@ -129,7 +129,7 @@ module:
   `admin_queue_attributes` packs each 0-based into its own 12-bit field, so both decode back to
   the counts asked for, and it sets no reserved bit.
 - `a_shutdown_notification_changes_only_its_field`: for any configuration word,
-  `shutdown_controller_configuration` leaves the Shutdown Notification field at the normal value
+  `controller_configuration_with_shutdown_notification` leaves the Shutdown Notification field at the normal value
   01b, whatever it held, and keeps every other bit; the two Shutdown Status bits sit at bits 2:3.
 - `completion_decode_is_total_and_rebuilds_dword_three`: for any four dwords, the command
   identifier, the phase tag and the 15-bit status field rebuild dword 3 exactly, so the decode
@@ -138,9 +138,9 @@ module:
   type, the retry delay, More and Do Not Retry each lie in the range their width allows. Together
   they rebuild the 15-bit status field. Success is exactly an all-zero field, and the phase read
   from dword 3 alone equals the decoded phase tag.
-- `no_command_identifier_releases_twice`: for any set of identifiers in flight, `InFlight::release`
+- `no_command_identifier_releases_twice`: for any set of identifiers in flight, `CommandIdentifierSet::release`
   frees an identifier exactly when it is in flight, so a second completion for it is refused.
-  `InFlight::mint` hands out only a free identifier and refuses only when the set is full.
+  `CommandIdentifierSet::acquire` hands out only a free identifier and refuses only when the set is full.
 - `record_head_accepts_only_a_head_the_controller_can_have_reached`: for any ring state and any
   head a controller reports, `SubmissionQueue::record_head` records the head only when it lies from
   the recorded head forward, round the ring, to the tail. Any other head returns
@@ -184,7 +184,7 @@ specification sets (section 7.6.1). The offsets are in the `registers` module.
    for `CONTROLLER_STATUS_READY`, giving up on `CONTROLLER_STATUS_FATAL`.
 4. Identify the controller and the namespace, then create each I/O completion queue before the
    submission queue that completes into it.
-5. To shut down, write `shutdown_controller_configuration` of the value written in step 3, and
+5. To shut down, write `controller_configuration_with_shutdown_notification` of the value written in step 3, and
    wait for `CONTROLLER_STATUS_SHUTDOWN_COMPLETE` before removing power.
 
 `examples/qemu_driver.rs` follows these steps against a real controller.
@@ -238,13 +238,13 @@ of those. It builds one command at a time and walks one ring pair, as pure logic
 allocator, no `unsafe` and no dependency, so it compiles for any target and the model checker
 reaches all of it. It checks what the controller hands back instead of trusting it: a submission
 queue head the controller cannot have reached is an error, not a recorded value. So is a
-completion for a command identifier `InFlight` does not hold, which stands in for the tag set.
+completion for a command identifier `CommandIdentifierSet` does not hold, which stands in for the tag set.
 
 What that costs you: you write the volatile register accessors, the direct memory access
-allocation, the admin bring-up sequence and every wait, and you mint and release each command
+allocation, the admin bring-up sequence and every wait, and you acquire and release each command
 identifier yourself, on push and on its completion. A PRP list reaches as far as one list page,
 since the crate does not chain list pages. The crate gives the shutdown values
-(`shutdown_controller_configuration` and the two `CONTROLLER_STATUS_SHUTDOWN_*` bits), and the
+(`controller_configuration_with_shutdown_notification` and the two `CONTROLLER_STATUS_SHUTDOWN_*` bits), and the
 driver writes the one and waits for the other before it removes power.
 
 ## Minimum Rust version

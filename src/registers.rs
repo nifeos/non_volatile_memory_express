@@ -47,7 +47,7 @@ pub const CONTROLLER_STATUS_FATAL: u32 = 1 << 1;
 pub const CONTROLLER_STATUS_SHUTDOWN_OCCURRING: u32 = 1 << 2;
 /// Controller Status bit 3, the high bit of Shutdown Status (`CSTS.SHST` = 10b): the controller has
 /// finished its shutdown processing, and the host may clear the enable bit or remove power. See
-/// [`crate::shutdown_controller_configuration`].
+/// [`crate::controller_configuration_with_shutdown_notification`].
 #[doc(alias = "CSTS.SHST")]
 #[doc(alias = "SHST")]
 pub const CONTROLLER_STATUS_SHUTDOWN_COMPLETE: u32 = 1 << 3;

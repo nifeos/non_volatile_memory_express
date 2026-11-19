@@ -263,7 +263,7 @@ fn identify_controller_parse_is_total_and_reads_its_bytes() {
     let Some(controller) = parsed else {
         return;
     };
-    assert_eq!(controller.maximum_data_transfer_size_shift, data[77]);
+    assert_eq!(controller.maximum_data_transfer_page_shift, data[77]);
     assert_eq!(
         controller.maximum_namespace_id,
         u32::from_le_bytes([data[516], data[517], data[518], data[519]])
@@ -363,7 +363,7 @@ fn admin_queue_attributes_round_trip_the_two_sizes() {
 
 /// Falsification: replayable `falsifications/verification.a_shutdown_notification_changes_only_its_field.patch`
 /// **A shutdown notification is normal and touches nothing else.** For any configuration word the
-/// driver last wrote, `shutdown_controller_configuration` leaves Shutdown Notification (bits
+/// driver last wrote, `controller_configuration_with_shutdown_notification` leaves Shutdown Notification (bits
 /// 14:15) at 01b, the normal notification, whatever the field held before (an abrupt 10b or the
 /// reserved 11b included), and keeps every other bit, so the enable bit, the page size and the
 /// entry sizes stay as they were. The two Shutdown Status bits lie in the field the specification
@@ -371,7 +371,7 @@ fn admin_queue_attributes_round_trip_the_two_sizes() {
 #[kani::proof]
 fn a_shutdown_notification_changes_only_its_field() {
     let configuration: u32 = kani::any();
-    let shutdown = shutdown_controller_configuration(configuration);
+    let shutdown = controller_configuration_with_shutdown_notification(configuration);
     assert_eq!((shutdown >> 14) & 0b11, 0b01);
     assert_eq!(shutdown & !(0b11 << 14), configuration & !(0b11 << 14));
 
@@ -422,57 +422,57 @@ fn completion_status_parts_rebuild_the_status_field() {
     let completion = Completion::from_dwords([0, 0, 0, dword_three]);
 
     assert!(completion.status_code_type() < 1 << 3);
-    assert!(completion.command_retry_delay() < 1 << 2);
+    assert!(completion.command_retry_delay_selector() < 1 << 2);
     let rebuilt = u16::from(completion.status_code())
         | u16::from(completion.status_code_type()) << 8
-        | u16::from(completion.command_retry_delay()) << 11
-        | u16::from(completion.is_more_set()) << 13
-        | u16::from(completion.is_do_not_retry_set()) << 14;
+        | u16::from(completion.command_retry_delay_selector()) << 11
+        | u16::from(completion.has_more_status_information()) << 13
+        | u16::from(completion.is_retry_refused()) << 14;
     assert_eq!(rebuilt, completion.status);
     assert_eq!(completion.is_success(), dword_three >> 17 == 0);
     assert_eq!(Completion::is_phase_tag_set(dword_three), completion.phase);
 }
 
 /// Falsification: replayable `falsifications/verification.no_command_identifier_releases_twice.patch`
-/// **No command identifier releases twice, and none is minted while in flight.** For any set of
+/// **No command identifier releases twice, and none is acquired while in flight.** For any set of
 /// identifiers in flight and any identifier a completion carries, `release` succeeds exactly when
 /// that identifier is in flight, and then frees it alone, so a second completion for it is
-/// refused; a refused release changes nothing. `mint` hands out an identifier that was free, marks
+/// refused; a refused release changes nothing. `acquire` hands out an identifier that was free, marks
 /// only that one, and refuses exactly when the set is full. Two words, so that an identifier in
 /// the second word and one beyond the set are both reached.
 #[kani::proof]
 fn no_command_identifier_releases_twice() {
-    let start = InFlight::<2> { words: kani::any() };
+    let start = CommandIdentifierSet::<2> { words: kani::any() };
     let command_id: u16 = kani::any();
 
-    let mut in_flight = start;
-    match in_flight.release(command_id) {
+    let mut identifiers = start;
+    match identifiers.release(command_id) {
         Ok(()) => {
             assert!(start.contains(command_id));
-            assert!(!in_flight.contains(command_id));
-            assert_eq!(in_flight.len() + 1, start.len());
-            assert!(in_flight.release(command_id).is_err());
+            assert!(!identifiers.contains(command_id));
+            assert_eq!(identifiers.len() + 1, start.len());
+            assert!(identifiers.release(command_id).is_err());
         }
         Err(error) => {
             assert!(!start.contains(command_id));
             assert_eq!(error.command_id, command_id);
-            assert_eq!(in_flight, start);
+            assert_eq!(identifiers, start);
         }
     }
 
-    let mut in_flight = start;
-    match in_flight.mint() {
-        Some(minted) => {
-            assert!(!start.contains(minted));
-            assert!(in_flight.contains(minted));
-            assert_eq!(in_flight.len(), start.len() + 1);
+    let mut identifiers = start;
+    match identifiers.acquire() {
+        Some(acquired) => {
+            assert!(!start.contains(acquired));
+            assert!(identifiers.contains(acquired));
+            assert_eq!(identifiers.len(), start.len() + 1);
             let other: u16 = kani::any();
-            kani::assume(other != minted);
-            assert_eq!(in_flight.contains(other), start.contains(other));
+            kani::assume(other != acquired);
+            assert_eq!(identifiers.contains(other), start.contains(other));
         }
         None => {
-            assert_eq!(start.len(), InFlight::<2>::CAPACITY);
-            assert_eq!(in_flight, start);
+            assert_eq!(start.len(), CommandIdentifierSet::<2>::CAPACITY);
+            assert_eq!(identifiers, start);
         }
     }
 }
@@ -522,7 +522,7 @@ fn blocks_per_transfer_never_truncates_the_count() {
     let shift: u32 = kani::any();
     kani::assume((9..=12).contains(&shift));
     let namespace = IdentifyNamespace {
-        blocks: 0,
+        size_in_logical_blocks: 0,
         logical_block_size_shift: shift,
     };
     match namespace.blocks_per_transfer(unit) {
