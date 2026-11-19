@@ -82,21 +82,30 @@ timeout 120 qemu-system-x86_64 -machine q35 -m 512 -nographic -no-reboot \
 dd if=run/disk.img bs=4096 skip=1 count=1 | head -1
 ```
 
-Add `-accel kvm -cpu host` where the host allows it. The last run, QEMU 10.2.1 with an Ubuntu 7.0
-kernel, printed:
+Add `-accel kvm -cpu host` where the host allows it. Two more words on the `-append` line shape
+the run: `qemu_driver.depth=2` makes both ring pairs two entries deep, so every ring wraps within
+the run, and `qemu_driver.page_bytes=16384` configures the controller for a 16 KiB memory page,
+which the example takes from a 2 MiB huge page because it needs physically contiguous memory.
+The kernel needs `CONFIG_HUGETLBFS` for the second. The last run, QEMU 10.2.1 with an Ubuntu 7.0
+kernel and no accelerator, printed this with both words:
 
 ```text
 qemu_driver: /sys/bus/pci/devices/0000:00:03.0, CAP 0x004008200f0107ff
-qemu_driver: enabled, CC 0x00460001
+qemu_driver: enabled, CC 0x00460101, 16384-byte pages, rings of 2
 qemu_driver: namespace identifiers up to 256, transfers up to 524288 bytes
 qemu_driver: namespace 1, 131072 blocks of 512 bytes
 qemu_driver: read block 0, the marker is there
 qemu_driver: wrote block 1, flushed, read it back unchanged
+qemu_driver: admin ring pair, 4 commands, 2 laps, every head the tail: 1 0 1 0
+qemu_driver: I/O ring pair, 8 commands, 4 laps, every head the tail: 1 0 1 0 1 0 1 0
 qemu_driver: shutdown complete
 qemu_driver: PASS
 ```
 
-and powered the guest off in about 3 seconds with the accelerator. The `dd` line printed
-`written by the qemu_driver example, block 1`. The same run passed without the accelerator, and
-with `logical_block_size=4096,physical_block_size=4096` on the device (16384 blocks of 4096
-bytes). On a blank image it stopped at the read of block 0 with `FAIL`, as it should.
+and powered the guest off. Every submission queue head the controller reported was the tail the
+example had just written, across every wrap of both rings. The `dd` line printed
+`written by the qemu_driver example, block 1`. The same run passed with neither word (rings of 64,
+4 KiB pages, 128 I/O commands over two laps), with each word alone, and with
+`logical_block_size=4096,physical_block_size=4096` on the device (16384 blocks of 4096 bytes). On a
+blank image it stopped at the read of block 0 with `FAIL`, as it should, and `qemu_driver.depth=1`
+stopped before touching the controller.
