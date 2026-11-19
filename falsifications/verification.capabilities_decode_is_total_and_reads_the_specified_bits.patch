@@ -1,10 +1,10 @@
 Falsifies `non_volatile_memory_express::verification::capabilities_decode_is_total_and_reads_the_specified_bits`.
 
-The defect: `Capabilities::doorbell_stride` masks five bits instead of the register's four, so bit 36 of
+The defect: `Capabilities::doorbell_stride_exponent` masks five bits instead of the register's four, so bit 36 of
 the register (a reserved bit) leaks into the stride and the stride can reach 31. `doorbell` masks it
 back to four bits, so the damage would be a quietly wrong offset rather than a panic.
 
-Expected to fail: the harness's `assert!(capabilities.doorbell_stride() <= 15)`.
+Expected to fail: the harness's `assert!(capabilities.doorbell_stride_exponent() <= 15)`.
 
 diff --git a/src/capabilities.rs b/src/capabilities.rs
 --- a/src/capabilities.rs
@@ -12,7 +12,7 @@ diff --git a/src/capabilities.rs b/src/capabilities.rs
 @@ -18,7 +18,7 @@
      #[doc(alias = "CAP.DSTRD")]
      #[doc(alias = "DSTRD")]
-     pub fn doorbell_stride(self) -> u32 {
+     pub fn doorbell_stride_exponent(self) -> u32 {
 -        (self.0 >> 32) as u32 & 0xf
 +        (self.0 >> 32) as u32 & 0x1f
      }

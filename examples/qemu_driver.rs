@@ -507,7 +507,7 @@ mod linux {
         {
             return Err("the controller takes neither 4 KiB pages nor 64-entry rings".into());
         }
-        let stride = capabilities.doorbell_stride();
+        let stride = capabilities.doorbell_stride_exponent();
         let mut admin = QueuePair::new(0)?;
         let configuration = bring_up(&registers, capabilities, &admin)?;
         let _ = writeln!(out, "qemu_driver: enabled, CC {configuration:#010x}");

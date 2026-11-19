@@ -86,11 +86,11 @@ fn distinct_doorbells_never_collide() {
     } else {
         Doorbell::CompletionHead
     };
-    let doorbell_stride: u32 = kani::any();
+    let doorbell_stride_exponent: u32 = kani::any();
     if (first_queue_id, first_role) != (second_queue_id, second_role) {
         assert!(
-            doorbell(first_queue_id, first_role, doorbell_stride)
-                != doorbell(second_queue_id, second_role, doorbell_stride)
+            doorbell(first_queue_id, first_role, doorbell_stride_exponent)
+                != doorbell(second_queue_id, second_role, doorbell_stride_exponent)
         );
     }
 }
@@ -295,9 +295,9 @@ fn capabilities_decode_is_total_and_reads_the_specified_bits() {
     assert!((1..=65_536).contains(&depth));
     assert_eq!(u64::from(depth), (register & 0xffff) + 1);
 
-    assert!(capabilities.doorbell_stride() <= 15);
+    assert!(capabilities.doorbell_stride_exponent() <= 15);
     assert_eq!(
-        u64::from(capabilities.doorbell_stride()),
+        u64::from(capabilities.doorbell_stride_exponent()),
         (register >> 32) & 0xf
     );
 

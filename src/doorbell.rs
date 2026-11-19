@@ -12,7 +12,9 @@ pub enum Doorbell {
     CompletionHead,
 }
 
-/// The BAR0 offset of queue `queue_id`'s doorbell. `doorbell_stride` is [`crate::Capabilities::doorbell_stride`].
+/// The BAR0 offset of queue `queue_id`'s doorbell. `doorbell_stride_exponent` is
+/// [`crate::Capabilities::doorbell_stride_exponent`], the raw
+/// `CAP.DSTRD` field, not a byte count: the stride in bytes is `2^(2 + doorbell_stride_exponent)`.
 ///
 /// The stride scales the whole doorbell file: `CAP.DSTRD` is four bits, so a controller may space
 /// its doorbells as far as `4 << 15` bytes apart, and queue 1's doorbells then sit hundreds of
@@ -26,7 +28,7 @@ pub enum Doorbell {
 ///
 /// // A controller reporting DSTRD 0, so doorbells are 4 bytes apart.
 /// let capabilities = Capabilities(0);
-/// assert_eq!(capabilities.doorbell_stride(), 0);
+/// assert_eq!(capabilities.doorbell_stride_exponent(), 0);
 ///
 /// // Admin queue (queue_id 0), then the one I/O queue pair this driver creates.
 /// assert_eq!(doorbell(0, Doorbell::SubmissionTail, 0), 0x1000);
@@ -34,13 +36,13 @@ pub enum Doorbell {
 /// assert_eq!(doorbell(1, Doorbell::SubmissionTail, 0), 0x1008);
 /// assert_eq!(doorbell(1, Doorbell::CompletionHead, 0), 0x100c);
 /// ```
-pub fn doorbell(queue_id: u16, role: Doorbell, doorbell_stride: u32) -> u64 {
+pub fn doorbell(queue_id: u16, role: Doorbell, doorbell_stride_exponent: u32) -> u64 {
     let index = 2 * queue_id as u64
         + match role {
             Doorbell::SubmissionTail => 0,
             Doorbell::CompletionHead => 1,
         };
-    registers::FIRST_DOORBELL_REGISTER + index * (4u64 << (doorbell_stride & 0xf))
+    registers::FIRST_DOORBELL_REGISTER + index * (4u64 << (doorbell_stride_exponent & 0xf))
 }
 
 #[cfg(test)]
