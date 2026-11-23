@@ -215,10 +215,10 @@ specification sets (section 7.6.1). The offsets are in the `registers` module.
 - Completion by interrupt is not supported yet. `Command::create_io_completion_queue` writes
   `IEN`=0 and interrupt vector 0, the builders take no vector, and `registers` names neither
   `INTMS` nor `INTMC`, so a driver polls the phase tag. Prior art for adding it: tgoskits
-  `drivers/blk/nvme-driver` (MIT), which gives the admin queue message-signaled interrupt (MSI-X)
-  vector 0 and each I/O queue pair a vector of its own. With fewer than two vectors it falls back
-  to one queue on the PCI pin interrupt (INTx), masked through `INTMS` and unmasked through
-  `INTMC`.
+  `drivers/blk/nvme-driver` (MIT). It uses extended message signaled interrupts, with vector 0
+  for the admin queue and a vector of its own for each I/O queue pair. With fewer than two
+  vectors it falls back to one queue on the legacy interrupt pin, masked through `INTMS` and
+  unmasked through `INTMC`.
 - `parse_identify_namespace` refuses LBA formats outside 512 bytes to 4 KiB per block.
   `logical_block_size_shift` reports the shift it refused.
 - Not proven: the meaning of a status code within its code type, and anything in time, which
