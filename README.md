@@ -212,6 +212,13 @@ specification sets (section 7.6.1). The offsets are in the `registers` module.
   64-byte submission and 16-byte completion entries, the sizes of the non-volatile memory (NVM) command set, which the
   command builders and both rings assume and which Linux also writes unconditionally. A driver for
   a controller that reports other sizes reads those two bytes itself.
+- Completion by interrupt is not supported yet. `Command::create_io_completion_queue` writes
+  `IEN`=0 and interrupt vector 0, the builders take no vector, and `registers` names neither
+  `INTMS` nor `INTMC`, so a driver polls the phase tag. Prior art for adding it: tgoskits
+  `drivers/blk/nvme-driver` (MIT). It uses extended message signaled interrupts, with vector 0
+  for the admin queue and a vector of its own for each I/O queue pair. With fewer than two
+  vectors it falls back to one queue on the legacy interrupt pin, masked through `INTMS` and
+  unmasked through `INTMC`.
 - `parse_identify_namespace` refuses LBA formats outside 512 bytes to 4 KiB per block.
   `logical_block_size_shift` reports the shift it refused.
 - Not proven: the meaning of a status code within its code type, and anything in time, which
