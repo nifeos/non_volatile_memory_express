@@ -7,6 +7,6 @@ permissions:
   contents: read
 jobs:
   weekly:
-    uses: partsfoundry/crate-workflows/.github/workflows/weekly.yml@cea7eb07cad666317bb5ad9136144e65e275fd73
+    uses: nifeos/crate-workflows/.github/workflows/weekly.yml@cea7eb07cad666317bb5ad9136144e65e275fd73
     secrets:
       SETTINGS_TOKEN: ${{ secrets.SETTINGS_TOKEN }}
