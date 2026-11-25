@@ -1,9 +1,9 @@
 # `non_volatile_memory_express`
 
-[![check](https://github.com/nifeos/non_volatile_memory_express/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/nifeos/non_volatile_memory_express/actions/workflows/ci.yml?query=branch%3Amain)
-[![proofs](https://github.com/nifeos/non_volatile_memory_express/actions/workflows/proofs.yml/badge.svg?branch=main)](https://github.com/nifeos/non_volatile_memory_express/actions/workflows/proofs.yml?query=branch%3Amain)
-[![license](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](https://github.com/nifeos/non_volatile_memory_express#license)
-[![minimum Rust version](https://img.shields.io/badge/rust-1.85%2B-blue.svg)](https://github.com/nifeos/non_volatile_memory_express/blob/main/Cargo.toml)
+[![check](https://github.com/partsfoundry/non_volatile_memory_express/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/partsfoundry/non_volatile_memory_express/actions/workflows/ci.yml?query=branch%3Amain)
+[![proofs](https://github.com/partsfoundry/non_volatile_memory_express/actions/workflows/proofs.yml/badge.svg?branch=main)](https://github.com/partsfoundry/non_volatile_memory_express/actions/workflows/proofs.yml?query=branch%3Amain)
+[![license](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](https://github.com/partsfoundry/non_volatile_memory_express#license)
+[![minimum Rust version](https://img.shields.io/badge/rust-1.85%2B-blue.svg)](https://github.com/partsfoundry/non_volatile_memory_express/blob/main/Cargo.toml)
 
 The queue mechanics of an `NVMe` (Non-Volatile Memory Express) driver, as pure logic. It covers
 register field decode, command building, submission and completion ring arithmetic with the phase
@@ -269,7 +269,7 @@ run `cargo +1.85 build --target aarch64-unknown-none-softfloat`.
 ## License
 
 Licensed under either of MIT
-([LICENSE-MIT](https://github.com/nifeos/non_volatile_memory_express/blob/main/LICENSE-MIT)) or
+([LICENSE-MIT](https://github.com/partsfoundry/non_volatile_memory_express/blob/main/LICENSE-MIT)) or
 Apache-2.0
-([LICENSE-APACHE](https://github.com/nifeos/non_volatile_memory_express/blob/main/LICENSE-APACHE)),
+([LICENSE-APACHE](https://github.com/partsfoundry/non_volatile_memory_express/blob/main/LICENSE-APACHE)),
 at your option.
