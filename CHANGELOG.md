@@ -3,6 +3,13 @@
 Dates are UTC. One line per release, what changed and why, so a reader of the diff has the
 sentence beside it.
 
+## 0.1.0-pre.4
+
+- The crate's code is unchanged. The QEMU driver example runs at queue depth 2 and with a 16 KiB
+  page, and checks every reported head.
+- The README states under BUGS that completion by interrupt is not supported yet and that the queue
+  entry sizes reported by Identify Controller go unread.
+
 ## 0.1.0-pre.3
 
 - Names follow the architect's rulings, with no alias for the old spellings. `InFlight` is
