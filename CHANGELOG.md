@@ -5,10 +5,10 @@ sentence beside it.
 
 ## 0.1.0-pre.4
 
-- The crate's code is unchanged. The QEMU driver example runs at queue depth 2 and with a 16 KiB
+- The crate's code does not change. The QEMU driver example runs at queue depth 2 and with a 16 KiB
   page, and checks every reported head.
-- The README states under BUGS that completion by interrupt is not supported yet and that the queue
-  entry sizes reported by Identify Controller go unread.
+- The README states under BUGS that the crate does not support completion by interrupt yet and does
+  not read the queue entry sizes that Identify Controller reports.
 
 ## 0.1.0-pre.3
 
