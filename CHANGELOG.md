@@ -8,6 +8,11 @@ sentence beside it.
 - `parse_identify_namespace` refuses a namespace whose logical block address (LBA) format in use carries metadata, which the
   crate does not support. It accepted one as if each block held only its data, so a caller sized
   transfer buffers too small. New: `metadata_size_bytes` reports the metadata size a refusal saw.
+- The format index is `FLBAS` bits 3:0 with bits 6:5 above them, so for a namespace formatted
+  with format 16 or above the crate reads that format's entry, not another's. The upper bits
+  count only when the namespace supports more than 16 formats, as the specification says. The
+  parse refuses an index past `NLBAF`, and `logical_block_size_shift` and `metadata_size_bytes`
+  return `None` for it.
 
 ## 0.1.0-pre.4
 

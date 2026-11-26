@@ -29,7 +29,10 @@ fuzz_target!(|data: &[u8]| {
     let (block, address, flags, any_unit) = (word(0), word(8), word(16), word(24));
 
     let reported = logical_block_size_shift(structure);
-    assert_eq!(reported.is_some(), structure.len() >= 384);
+    assert_eq!(reported.is_some(), metadata_size_bytes(structure).is_some());
+    if structure.len() < 384 {
+        assert_eq!(reported, None);
+    }
     let Some(namespace) = parse_identify_namespace(structure) else {
         return;
     };
