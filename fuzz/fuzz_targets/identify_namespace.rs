@@ -4,7 +4,8 @@
 //! The input's first 32 bytes choose what a driver asks next (a block number, a buffer address, a
 //! direction, a transfer unit of any size), and the rest is the structure. The target holds the two
 //! parse functions to each other and to what they promise: `parse_identify_namespace` accepts only
-//! a shift of 9 to 12 and then agrees with `logical_block_size_shift`, and a 4096-byte unit always
+//! a shift of 9 to 12 with no metadata and then agrees with `logical_block_size_shift` and
+//! `metadata_size_bytes`, and a 4096-byte unit always
 //! covers 1 to 8 logical blocks. The namespace built from the answer is refused only when its
 //! capacity in bytes would wrap, and builds a transfer command only for a block it holds. Any other
 //! unit, including one of 65536 logical blocks or more, either covers a nonzero count of whole
@@ -14,7 +15,7 @@
 
 use libfuzzer_sys::fuzz_target;
 use non_volatile_memory_express::{
-    Direction, Namespace, logical_block_size_shift, parse_identify_namespace,
+    Direction, Namespace, logical_block_size_shift, metadata_size_bytes, parse_identify_namespace,
 };
 
 /// The transfer unit this crate serves: one 4096-byte block.
@@ -33,6 +34,7 @@ fuzz_target!(|data: &[u8]| {
         return;
     };
     assert_eq!(reported, Some(namespace.logical_block_size_shift as u8));
+    assert_eq!(metadata_size_bytes(structure), Some(0));
     assert!((9..=12).contains(&namespace.logical_block_size_shift));
     assert_eq!(
         namespace.size_in_logical_blocks,

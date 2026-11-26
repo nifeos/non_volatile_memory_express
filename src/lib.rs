@@ -34,8 +34,8 @@ pub use configuration::{
 };
 pub use doorbell::{Doorbell, doorbell};
 pub use identify::{
-    IdentifyController, IdentifyNamespace, logical_block_size_shift, parse_identify_controller,
-    parse_identify_namespace,
+    IdentifyController, IdentifyNamespace, logical_block_size_shift, metadata_size_bytes,
+    parse_identify_controller, parse_identify_namespace,
 };
 pub use namespace::{Direction, Namespace};
 pub use physical_region_page::{

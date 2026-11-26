@@ -3,6 +3,12 @@
 Dates are UTC. One line per release, what changed and why, so a reader of the diff has the
 sentence beside it.
 
+## Unreleased
+
+- `parse_identify_namespace` refuses a namespace whose logical block address (LBA) format in use carries metadata, which the
+  crate does not support. It accepted one as if each block held only its data, so a caller sized
+  transfer buffers too small. New: `metadata_size_bytes` reports the metadata size a refusal saw.
+
 ## 0.1.0-pre.4
 
 - The crate's code does not change. The QEMU driver example runs at queue depth 2 and with a 16 KiB
