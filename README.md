@@ -219,8 +219,10 @@ specification sets (section 7.6.1). The offsets are in the `registers` module.
   for the admin queue and a vector of its own for each I/O queue pair. With fewer than two
   vectors it falls back to one queue on the legacy interrupt pin, masked through `INTMS` and
   unmasked through `INTMC`.
-- `parse_identify_namespace` refuses LBA formats outside 512 bytes to 4 KiB per block.
-  `logical_block_size_shift` reports the shift it refused.
+- `parse_identify_namespace` refuses LBA formats outside 512 bytes to 4 KiB per block, and any
+  format with metadata, at the end of each block or in a separate buffer. The read and write
+  builders carry no Metadata Pointer. `logical_block_size_shift` and
+  `metadata_size_bytes` report what it refused.
 - Not proven: the meaning of a status code within its code type, and anything in time, which
   belongs to the caller. The proofs place each part of the status field at its bits, and the crate
   names only the generic code type and two of its codes.

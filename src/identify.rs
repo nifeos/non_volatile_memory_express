@@ -5,23 +5,25 @@
 /// figure 245): the namespace size in logical blocks (Namespace Size (`NSZE`), bytes 0..8) and the
 /// data shift of the logical block address (LBA) format in use (Formatted LBA Size (`FLBAS`) names
 /// one of 16 formats; each format's LBA Data Size (`LBADS`) is `1 << shift` bytes per block). `None`
-/// if the structure is shorter than the fields it must carry, or describes a block size outside
-/// what a driver of 4096-byte blocks can serve (`LBADS` below 9 is the specification's "unsupported"
-/// marker; above 12 a block would outgrow the transfer buffer).
+/// if the structure is shorter than the fields it must carry, describes a block size outside what a
+/// driver of 4096-byte blocks can serve (`LBADS` below 9 is the specification's "unsupported"
+/// marker; above 12 a block would outgrow the transfer buffer), or selects a format with metadata.
+///
+/// The crate does not support metadata, so a format whose Metadata Size (`MS`) is not 0 is refused
+/// whichever way `FLBAS` bit 4 says it travels. With the bit set, each block on the wire is its data
+/// followed by `MS` metadata bytes, and a buffer sized from the data shift is too small. With it
+/// clear, the controller moves the metadata through the command's Metadata Pointer, which
+/// [`crate::Command::read`] and [`crate::Command::write`] leave at 0. [`metadata_size_bytes`]
+/// reports the size a refusal saw.
 pub fn parse_identify_namespace(data: &[u8]) -> Option<IdentifyNamespace> {
-    if data.len() < 384 {
-        return None; // NSZE..the LBA format table must be present
-    }
+    let format = selected_format(data)?;
     let namespace_size = u64::from_le_bytes(data[0..8].try_into().ok()?);
-    let format_index = data[26] & 0xf;
-    // LBA format `format_index` is 4 bytes at 128 + 4*format_index; LBADS is its third byte.
-    let data_shift = data[128 + 4 * format_index as usize + 2];
-    if !(9..=12).contains(&data_shift) {
+    if !(9..=12).contains(&format.data_shift) || format.metadata_bytes != 0 {
         return None;
     }
     Some(IdentifyNamespace {
         size_in_logical_blocks: namespace_size,
-        logical_block_size_shift: data_shift as u32,
+        logical_block_size_shift: u32::from(format.data_shift),
     })
 }
 
@@ -34,11 +36,52 @@ pub fn parse_identify_namespace(data: &[u8]) -> Option<IdentifyNamespace> {
 /// `blocks_per_transfer` falls in `1..=8`, and a namespace this driver declines has to print its
 /// LBA size rather than arrive as a server that never started and a test that reads "skipped".
 pub fn logical_block_size_shift(data: &[u8]) -> Option<u8> {
+    Some(selected_format(data)?.data_shift)
+}
+
+/// **The metadata bytes per logical block of the format in use, whatever they are**: the Metadata
+/// Size (`MS`, bits 15:00 of the LBA Format Data Structure in the NVM Command Set Specification
+/// 1.1, figure 116) of the format that `FLBAS` selects, which [`parse_identify_namespace`] refuses
+/// unless it is 0. `None` only when the structure is too short to carry the format table.
+///
+/// It exists for the reason [`logical_block_size_shift`] does: a namespace refused for its metadata
+/// says so, rather than reporting a data size the driver would otherwise accept.
+///
+/// # Examples
+///
+/// ```
+/// use non_volatile_memory_express::{metadata_size_bytes, parse_identify_namespace};
+///
+/// let mut structure = [0u8; 4096];
+/// structure[26] = 0x10; // FLBAS: format 0, metadata at the end of each block
+/// structure[128..130].copy_from_slice(&8u16.to_le_bytes()); // format 0: 8 metadata bytes
+/// structure[130] = 9; // format 0: 512 data bytes
+/// assert_eq!(parse_identify_namespace(&structure), None);
+/// assert_eq!(metadata_size_bytes(&structure), Some(8));
+/// ```
+#[doc(alias = "MS")]
+pub fn metadata_size_bytes(data: &[u8]) -> Option<u16> {
+    Some(selected_format(data)?.metadata_bytes)
+}
+
+/// The two fields of the LBA format that `FLBAS` bits 3:0 select, read from its 4-byte entry at
+/// `128 + 4 * index`: `MS` in bytes 0 and 1, little-endian, and `LBADS` in byte 2. `None` if the
+/// structure is shorter than the 384 bytes that reach the end of the format table.
+fn selected_format(data: &[u8]) -> Option<LogicalBlockFormat> {
     if data.len() < 384 {
         return None;
     }
-    let format_index = data[26] & 0xf;
-    Some(data[128 + 4 * format_index as usize + 2])
+    let entry = 128 + 4 * usize::from(data[26] & 0xf);
+    Some(LogicalBlockFormat {
+        metadata_bytes: u16::from_le_bytes([data[entry], data[entry + 1]]),
+        data_shift: data[entry + 2],
+    })
+}
+
+/// One LBA format entry, as [`selected_format`] reads it.
+struct LogicalBlockFormat {
+    metadata_bytes: u16,
+    data_shift: u8,
 }
 
 /// See [`parse_identify_namespace`]. The struct is `#[non_exhaustive]`: a later release may read
@@ -211,6 +254,62 @@ mod tests {
             Some(0),
             "384 bytes is enough"
         );
+    }
+
+    /// A format with metadata is refused in both of the ways it can travel: at the end of each
+    /// block (`FLBAS` bit 4 set) and in a separate buffer (bit 4 clear). Bit 4 alone, with no
+    /// metadata, changes nothing, since the specification says it does not apply then. Both bytes
+    /// of `MS` count, and so does the smallest nonzero size.
+    #[test]
+    fn a_format_with_metadata_is_refused_however_the_metadata_travels() {
+        let mut data = [0u8; 4096];
+        data[0..8].copy_from_slice(&16u64.to_le_bytes());
+        data[130] = 9; // format 0: 512 data bytes
+        data[26] = 0x10; // FLBAS: format 0, bit 4 set, and no metadata
+        assert!(parse_identify_namespace(&data).is_some(), "bit 4 alone");
+        assert_eq!(metadata_size_bytes(&data), Some(0));
+
+        for metadata in [1u16, 8, 64, 0x100, u16::MAX] {
+            data[128..130].copy_from_slice(&metadata.to_le_bytes());
+            for flbas in [0x00, 0x10] {
+                data[26] = flbas;
+                assert_eq!(
+                    parse_identify_namespace(&data),
+                    None,
+                    "MS {metadata}, FLBAS {flbas:#x}"
+                );
+                assert_eq!(metadata_size_bytes(&data), Some(metadata));
+                assert_eq!(
+                    logical_block_size_shift(&data),
+                    Some(9),
+                    "the data shift still reads"
+                );
+            }
+        }
+        assert_eq!(metadata_size_bytes(&[0u8; 383]), None);
+    }
+
+    /// The metadata size is read from the format `FLBAS` selects, never from format 0: a format
+    /// with metadata beside the one in use does not refuse it, and the one in use refuses even
+    /// when format 0 has none.
+    #[test]
+    fn the_metadata_size_is_the_selected_formats() {
+        let mut data = [0u8; 384];
+        data[0..8].copy_from_slice(&1u64.to_le_bytes());
+        data[26] = 1; // FLBAS: format 1
+        data[128..130].copy_from_slice(&8u16.to_le_bytes()); // format 0: metadata, not in use
+        data[130] = 9;
+        data[134] = 12; // format 1: 4096 data bytes, no metadata
+        assert_eq!(metadata_size_bytes(&data), Some(0));
+        assert_eq!(
+            parse_identify_namespace(&data).map(|id| id.logical_block_size_shift),
+            Some(12)
+        );
+
+        data[128..130].copy_from_slice(&[0, 0]);
+        data[132..134].copy_from_slice(&16u16.to_le_bytes()); // format 1: 16 metadata bytes
+        assert_eq!(metadata_size_bytes(&data), Some(16));
+        assert_eq!(parse_identify_namespace(&data), None);
     }
 
     #[test]
