@@ -248,20 +248,36 @@ fn identify_parse_is_total_and_bounds_the_shift() {
 }
 
 /// Falsification: replayable `falsifications/verification.identify_parse_accepts_exactly_the_formats_without_metadata.patch`
-/// **A namespace is accepted exactly when the format in use has a served block size and no
-/// metadata**, for any device response. The Metadata Size and data shift are read here from the
-/// entry `FLBAS` bits 3:0 select, independently of the parse, so an accepted namespace never hides
-/// metadata bytes that a buffer sized from its shift would lack, and none of the other bits of
-/// `FLBAS`, among them bit 4, decide anything.
+/// **A namespace is accepted exactly when the format in use is listed, has a served block size and
+/// has no metadata**, for any device response. The format index, its bound and the entry's
+/// Metadata Size and data shift are worked out here independently of the parse: `FLBAS` bits 3:0
+/// plus 16 times bits 6:5, the upper part counting only when `NLBAF` + 1 + `NULBAF` exceeds 16, and
+/// listed only up to `NLBAF`. So an accepted namespace never hides metadata bytes that a buffer
+/// sized from its shift would lack, never reads another format's entry, and bits 4 and 7 of
+/// `FLBAS` decide nothing.
 #[kani::proof]
 fn identify_parse_accepts_exactly_the_formats_without_metadata() {
     let data: [u8; 384] = kani::any();
-    let entry = 128 + 4 * usize::from(data[26] & 0xf);
+    let (lower, upper) = (data[26] % 16, data[26] / 32 % 4);
+    let total_formats = u32::from(data[25]) + 1 + u32::from(data[82]);
+    let index = if total_formats <= 16 {
+        lower
+    } else {
+        lower + 16 * upper
+    };
+    let parsed = parse_identify_namespace(&data);
+    if index > data[25] {
+        assert!(parsed.is_none());
+        assert_eq!(metadata_size_bytes(&data), None);
+        assert_eq!(logical_block_size_shift(&data), None);
+        return;
+    }
+    let entry = 128 + 4 * usize::from(index);
     let metadata = u16::from_le_bytes([data[entry], data[entry + 1]]);
     let shift = data[entry + 2];
-    let parsed = parse_identify_namespace(&data);
     assert_eq!(parsed.is_some(), metadata == 0 && (9..=12).contains(&shift));
     assert_eq!(metadata_size_bytes(&data), Some(metadata));
+    assert_eq!(logical_block_size_shift(&data), Some(shift));
     if let Some(id) = parsed {
         assert_eq!(id.logical_block_size_shift, u32::from(shift));
     }

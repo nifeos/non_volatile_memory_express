@@ -4,10 +4,11 @@
 /// The two facts the driver needs from the 4096-byte Identify namespace structure (section 5.15.2,
 /// figure 245): the namespace size in logical blocks (Namespace Size (`NSZE`), bytes 0..8) and the
 /// data shift of the logical block address (LBA) format in use (Formatted LBA Size (`FLBAS`) names
-/// one of 16 formats; each format's LBA Data Size (`LBADS`) is `1 << shift` bytes per block). `None`
-/// if the structure is shorter than the fields it must carry, describes a block size outside what a
-/// driver of 4096-byte blocks can serve (`LBADS` below 9 is the specification's "unsupported"
-/// marker; above 12 a block would outgrow the transfer buffer), or selects a format with metadata.
+/// one of up to 64 formats; each format's LBA Data Size (`LBADS`) is `1 << shift` bytes per block).
+/// `None` if the structure is shorter than the fields it must carry, selects a format past the
+/// ones it lists, describes a block size outside what a driver of 4096-byte blocks can serve
+/// (`LBADS` below 9 is the specification's "unsupported" marker; above 12 a block would outgrow
+/// the transfer buffer), or selects a format with metadata.
 ///
 /// The crate does not support metadata, so a format whose Metadata Size (`MS`) is not 0 is refused
 /// whichever way `FLBAS` bit 4 says it travels. With the bit set, each block on the wire is its data
@@ -30,7 +31,8 @@ pub fn parse_identify_namespace(data: &[u8]) -> Option<IdentifyNamespace> {
 /// **The LBA data shift the namespace is formatted with, whatever it is**: the same `LBADS`
 /// (LBA Data Size, bits 23:16 of the LBA Format Data Structure in the NVM Command Set
 /// Specification 1.3) byte [`parse_identify_namespace`] reads, before that function's bounds refuse
-/// it. `None` only when the structure is too short to carry the format table.
+/// it. `None` when the structure is too short to carry the format table or selects a format past
+/// the ones it lists, since then no entry describes the format in use.
 ///
 /// It exists so a refusal can say what it refused. A drive must be formatted so that
 /// `blocks_per_transfer` falls in `1..=8`, and a namespace this driver declines has to print its
@@ -42,7 +44,7 @@ pub fn logical_block_size_shift(data: &[u8]) -> Option<u8> {
 /// **The metadata bytes per logical block of the format in use, whatever they are**: the Metadata
 /// Size (`MS`, bits 15:00 of the LBA Format Data Structure in the NVM Command Set Specification
 /// 1.1, figure 116) of the format that `FLBAS` selects, which [`parse_identify_namespace`] refuses
-/// unless it is 0. `None` only when the structure is too short to carry the format table.
+/// unless it is 0. `None` when [`logical_block_size_shift`] is.
 ///
 /// It exists for the reason [`logical_block_size_shift`] does: a namespace refused for its metadata
 /// says so, rather than reporting a data size the driver would otherwise accept.
@@ -64,14 +66,33 @@ pub fn metadata_size_bytes(data: &[u8]) -> Option<u16> {
     Some(selected_format(data)?.metadata_bytes)
 }
 
-/// The two fields of the LBA format that `FLBAS` bits 3:0 select, read from its 4-byte entry at
-/// `128 + 4 * index`: `MS` in bytes 0 and 1, little-endian, and `LBADS` in byte 2. `None` if the
-/// structure is shorter than the 384 bytes that reach the end of the format table.
+/// The two fields of the LBA format in use, read from its 4-byte entry at `128 + 4 * index`: `MS`
+/// in bytes 0 and 1, little-endian, and `LBADS` in byte 2. `None` if the structure is shorter than
+/// the 384 bytes that reach the end of the format table, or if the index is greater than Number of
+/// LBA Formats (`NLBAF`, byte 25, 0-based).
+///
+/// The index is `FLBAS` bits 3:0, Format Index Lower (`FIDXL`), with bits 6:5, Format Index Upper
+/// (`FIDXU`), above them (NVM Command Set Specification 1.1, figure 114). The specification tells
+/// a host to ignore `FIDXU` when the namespace supports 16 formats or fewer in total: `NLBAF` + 1
+/// plus Number of Unique Attribute LBA Formats (`NULBAF`, byte 82, 1-based), as section 5.5 adds
+/// them. An index past `NLBAF` is refused even when `NULBAF` covers it, because figure 176
+/// associates the table in this structure with the formats `NLBAF` counts only.
 fn selected_format(data: &[u8]) -> Option<LogicalBlockFormat> {
     if data.len() < 384 {
         return None;
     }
-    let entry = 128 + 4 * usize::from(data[26] & 0xf);
+    let (flbas, last_index) = (data[26], data[25]);
+    let total_formats = u16::from(last_index) + 1 + u16::from(data[82]);
+    let upper = if total_formats > 16 {
+        (flbas >> 5) & 0b11
+    } else {
+        0
+    };
+    let index = flbas & 0xf | upper << 4;
+    if index > last_index {
+        return None;
+    }
+    let entry = 128 + 4 * usize::from(index);
     Some(LogicalBlockFormat {
         metadata_bytes: u16::from_le_bytes([data[entry], data[entry + 1]]),
         data_shift: data[entry + 2],
@@ -224,6 +245,7 @@ mod tests {
     #[test]
     fn a_refused_lba_format_still_reports_its_shift() {
         let mut data = [0u8; 4096];
+        data[25] = 1; // NLBAF: two formats
         data[26] = 1; // FLBAS: format 1
         data[130] = 9; // format 0: 512 bytes, not the one in use
         data[134] = 13; // format 1: 8192 bytes
@@ -232,17 +254,20 @@ mod tests {
         assert_eq!(logical_block_size_shift(&[0u8; 383]), None);
     }
 
-    /// The shift is read at `128 + 4 * FLBAS + 2` for every format the nibble can name, from a
+    /// The shift is read at `128 + 4 * index + 2` for every index `FLBAS` can name, from a
     /// structure exactly 384 bytes long, with a different shift planted in every slot so a wrong
-    /// stride lands on another format's value.
+    /// stride lands on another format's value. The index is bits 3:0 with bits 6:5 above them, and
+    /// bits 4 and 7 are not part of it.
     #[test]
     fn the_reported_shift_is_the_one_in_the_format_index_slot_for_every_format() {
-        for format_index in 0..16u8 {
+        for format_index in 0..64u8 {
             let mut data = [0u8; 384];
-            for format in 0..16usize {
+            for format in 0..64usize {
                 data[128 + 4 * format + 2] = 20 + format as u8;
             }
-            data[26] = format_index | 0x70; // the bits above the format number are not part of it
+            data[25] = 63; // NLBAF: 64 formats
+            let upper = format_index >> 4;
+            data[26] = format_index & 0xf | upper << 5 | 0x90;
             assert_eq!(
                 logical_block_size_shift(&data),
                 Some(20 + format_index),
@@ -254,6 +279,57 @@ mod tests {
             Some(0),
             "384 bytes is enough"
         );
+    }
+
+    /// With 16 formats or fewer in total, `NLBAF` + 1 plus `NULBAF`, bits 6:5 of `FLBAS` are
+    /// ignored, as the specification tells a host to. With 17 or more they select formats 16 to
+    /// 63, and `NULBAF` counts toward the 17.
+    #[test]
+    fn the_upper_format_index_counts_only_with_more_than_16_formats() {
+        let mut data = [0u8; 384];
+        for format in 0..64usize {
+            data[128 + 4 * format + 2] = 20 + format as u8;
+        }
+        data[26] = 0x61; // FIDXU 3, FIDXL 1
+        data[25] = 15; // NLBAF: 16 formats
+        assert_eq!(
+            logical_block_size_shift(&data),
+            Some(21),
+            "16 formats: format 1"
+        );
+        data[82] = 1; // NULBAF: one more, 17 in total
+        assert_eq!(
+            logical_block_size_shift(&data),
+            None,
+            "17 formats: format 49, past NLBAF"
+        );
+        data[25] = 49;
+        assert_eq!(logical_block_size_shift(&data), Some(69), "format 49");
+        data[82] = 0;
+        assert_eq!(logical_block_size_shift(&data), Some(69), "50 formats");
+    }
+
+    /// An index greater than `NLBAF` names no format this structure lists, so every reader
+    /// refuses it, and an index equal to `NLBAF` is the last one listed.
+    #[test]
+    fn a_format_index_past_nlbaf_is_refused() {
+        let mut data = [0u8; 4096];
+        data[0..8].copy_from_slice(&1u64.to_le_bytes());
+        data[128 + 2] = 9;
+        data[128 + 4 * 3 + 2] = 12; // format 3: 4096 bytes
+        data[26] = 3; // FLBAS: format 3
+        data[25] = 2; // NLBAF: formats 0 to 2
+        assert_eq!(parse_identify_namespace(&data), None);
+        assert_eq!(logical_block_size_shift(&data), None);
+        assert_eq!(metadata_size_bytes(&data), None);
+        data[25] = 3; // NLBAF: formats 0 to 3
+        assert_eq!(
+            parse_identify_namespace(&data).map(|id| id.logical_block_size_shift),
+            Some(12)
+        );
+        data[82] = 4; // NULBAF does not stretch the list this structure carries
+        data[25] = 2;
+        assert_eq!(parse_identify_namespace(&data), None);
     }
 
     /// A format with metadata is refused in both of the ways it can travel: at the end of each
@@ -296,6 +372,7 @@ mod tests {
     fn the_metadata_size_is_the_selected_formats() {
         let mut data = [0u8; 384];
         data[0..8].copy_from_slice(&1u64.to_le_bytes());
+        data[25] = 1; // NLBAF: two formats
         data[26] = 1; // FLBAS: format 1
         data[128..130].copy_from_slice(&8u16.to_le_bytes()); // format 0: metadata, not in use
         data[130] = 9;
@@ -339,6 +416,7 @@ mod tests {
         // value rather than by accidentally landing on unset (and therefore refused) bytes.
         let mut data = [0u8; 384];
         data[0..8].copy_from_slice(&1u64.to_le_bytes());
+        data[25] = 1; // NLBAF: two formats
         data[26] = 1; // FLBAS: format 1
         data[128 + 2] = 10; // format 0's LBADS: a decoy
         data[128 + 4 + 2] = 11; // format 1's LBADS: the one that must be read
