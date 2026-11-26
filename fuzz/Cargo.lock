@@ -71,7 +71,7 @@ dependencies = [
 
 [[package]]
 name = "non_volatile_memory_express"
-version = "0.1.0-pre.3"
+version = "0.1.0-pre.4"
 
 [[package]]
 name = "non_volatile_memory_express-fuzz"
